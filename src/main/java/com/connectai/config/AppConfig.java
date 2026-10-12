@@ -49,6 +49,11 @@ public class AppConfig {
             properties.setProperty("supabase.anon.key", envKey);
         }
 
+        String envOpenAi = System.getenv("OPENAI_API_KEY");
+        if (envOpenAi != null && !envOpenAi.isBlank()) {
+            properties.setProperty("openai.api.key", envOpenAi);
+        }
+
         loaded = true;
     }
 
@@ -58,12 +63,47 @@ public class AppConfig {
         load();
         if (mockModeOverride != null) return mockModeOverride;
         String prop = properties.getProperty("app.mock_mode", "");
-        if ("true".equalsIgnoreCase(prop.trim())) return true;
         if ("false".equalsIgnoreCase(prop.trim())) return false;
+        if ("true".equalsIgnoreCase(prop.trim())) return true;
 
-        // Auto-enable mock mode if Supabase URL is placeholder or default
+        // Auto-enable mock mode only if Supabase is completely unconfigured
+        return !isSupabaseConfigured();
+    }
+
+    public static boolean isSupabaseConfigured() {
+        load();
         String url = getSupabaseUrl();
-        return url.isBlank() || url.contains("xyzcompany.supabase.co") || getSupabaseAnonKey().isBlank();
+        String key = getSupabaseAnonKey();
+        return !url.isBlank() && !url.contains("xyzcompany.supabase.co") && !key.isBlank() && !key.contains("example_anon_key");
+    }
+
+    public static synchronized void updateSupabaseCredentials(String url, String anonKey) {
+        load();
+        properties.setProperty("supabase.url", url.trim());
+        properties.setProperty("supabase.anon.key", anonKey.trim());
+        properties.setProperty("app.mock_mode", "false");
+        mockModeOverride = false;
+        saveProperties();
+    }
+
+    public static synchronized void saveProperties() {
+        try {
+            // Save to current working directory application.properties
+            File localFile = new File("application.properties");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(localFile)) {
+                properties.store(fos, "ConnectAI Application Configuration");
+            }
+
+            // Also update src/main/resources/application.properties if it exists in dev tree
+            File resFile = new File("src/main/resources/application.properties");
+            if (resFile.exists()) {
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(resFile)) {
+                    properties.store(fos, "ConnectAI Application Configuration");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to save application.properties: " + e.getMessage());
+        }
     }
 
     public static void setMockMode(boolean mockMode) {
@@ -79,6 +119,17 @@ public class AppConfig {
     public static String getSupabaseAnonKey() {
         load();
         return properties.getProperty("supabase.anon.key", "").trim();
+    }
+
+    public static String getOpenAiApiKey() {
+        load();
+        return properties.getProperty("openai.api.key", "").trim();
+    }
+
+    public static synchronized void updateOpenAiKey(String key) {
+        load();
+        properties.setProperty("openai.api.key", key.trim());
+        saveProperties();
     }
 
     public static String getAppName() {

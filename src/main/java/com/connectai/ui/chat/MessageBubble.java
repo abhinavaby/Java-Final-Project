@@ -50,9 +50,19 @@ public class MessageBubble extends JPanel {
         setOpaque(false);
         setBorder(BorderFactory.createEmptyBorder(4, 18, 4, 18));
 
+        String currentName = "You";
+        com.connectai.model.Profile p = com.connectai.service.AuthService.getInstance().getCurrentProfile();
+        if (p != null && p.getDisplayName() != null && !p.getDisplayName().isBlank()) {
+            currentName = p.getDisplayName();
+        } else if (com.connectai.service.AuthService.getInstance().getCurrentUser() != null
+                && com.connectai.service.AuthService.getInstance().getCurrentUser().getEmail() != null) {
+            String prefix = com.connectai.service.AuthService.getInstance().getCurrentUser().getEmail().split("@")[0];
+            currentName = Character.toUpperCase(prefix.charAt(0)) + (prefix.length() > 1 ? prefix.substring(1) : "");
+        }
+
         String senderName = message.getSenderProfile() != null
                 ? message.getSenderProfile().getEffectiveName()
-                : (isOutgoing ? "Alex Rivera" : "ConnectAI Assistant 🤖");
+                : (isOutgoing ? currentName : "Member");
 
         String timeStr = formatTime(message.getCreatedAt());
 

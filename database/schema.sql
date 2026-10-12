@@ -132,10 +132,11 @@ CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON public.poll_options(poll_id)
 CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON public.poll_votes(poll_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_message ON public.attachments(message_id);
 
--- Automatic Profile Creation Trigger on Auth Sign Up
+-- Automatic Profile Creation & Default Channel Enrollment on Auth Sign Up
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- 1. Create public profile
     INSERT INTO public.profiles (id, username, display_name, avatar_path, about)
     VALUES (
         NEW.id,
@@ -143,7 +144,17 @@ BEGIN
         COALESCE(NEW.raw_user_meta_data->>'display_name', 'ConnectAI User'),
         NEW.raw_user_meta_data->>'avatar_path',
         'Hey there! I am using ConnectAI.'
-    );
+    )
+    ON CONFLICT (id) DO NOTHING;
+
+    -- 2. Automatically grant membership to the three public default channels (accessible to everyone)
+    INSERT INTO public.conversation_members (conversation_id, user_id, role)
+    VALUES
+        ('00000000-0000-0000-0000-000000000001', NEW.id, 'MEMBER'),
+        ('00000000-0000-0000-0000-000000000002', NEW.id, 'MEMBER'),
+        ('00000000-0000-0000-0000-000000000003', NEW.id, 'MEMBER')
+    ON CONFLICT (conversation_id, user_id) DO NOTHING;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -168,3 +179,26 @@ DROP TRIGGER IF EXISTS on_new_message_update_conversation ON public.messages;
 CREATE TRIGGER on_new_message_update_conversation
     AFTER INSERT ON public.messages
     FOR EACH ROW EXECUTE FUNCTION public.update_conversation_timestamp();
+
+-- Seed the 3 Default Public Channels with access to everyone
+INSERT INTO public.conversations (id, type, name, description, invite_code, is_private)
+VALUES
+    ('00000000-0000-0000-0000-000000000001', 'GROUP', 'General Lounge', 'Public discussion lounge for all team members and newcomers.', 'GENERAL', false),
+    ('00000000-0000-0000-0000-000000000002', 'GROUP', 'Tech & AI Product Team', 'Core architecture, Java Swing UI components & AI integrations.', 'TECH2026', false),
+    ('00000000-0000-0000-0000-000000000003', 'GROUP', 'Design System Guild', 'UI/UX design, visual tokens, layouts & desktop guidelines.', 'DESIGN2026', false)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    is_private = EXCLUDED.is_private;
+
+-- Backfill: Ensure all existing registered profiles are enrolled in the 3 default channels
+INSERT INTO public.conversation_members (conversation_id, user_id, role)
+SELECT c.id, p.id, 'MEMBER'
+FROM public.conversations c
+CROSS JOIN public.profiles p
+WHERE c.id IN (
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000003'
+)
+ON CONFLICT (conversation_id, user_id) DO NOTHING;

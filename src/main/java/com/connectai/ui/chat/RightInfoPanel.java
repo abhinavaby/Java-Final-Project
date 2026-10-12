@@ -23,6 +23,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
 
 /**
@@ -198,12 +199,17 @@ public class RightInfoPanel extends JPanel {
 
     private void loadDefaultMembers() {
         membersListContainer.removeAll();
-        addMemberRow("Alex Rivera (You)", true, "Owner");
-        addMemberRow("ConnectAI Assistant 🤖", true, "Member");
-        addMemberRow("Sarah Jenkins", true, "Member");
-        addMemberRow("David Chen", true, "Member");
-        addMemberRow("Elena Rostova", false, "Member");
-        addMemberRow("Marcus Vance", true, "Member");
+        String currentName = "You";
+        com.connectai.model.Profile p = com.connectai.service.AuthService.getInstance().getCurrentProfile();
+        if (p != null && p.getDisplayName() != null && !p.getDisplayName().isBlank()) {
+            currentName = p.getDisplayName();
+        } else if (com.connectai.service.AuthService.getInstance().getCurrentUser() != null
+                && com.connectai.service.AuthService.getInstance().getCurrentUser().getEmail() != null) {
+            String prefix = com.connectai.service.AuthService.getInstance().getCurrentUser().getEmail().split("@")[0];
+            currentName = Character.toUpperCase(prefix.charAt(0)) + (prefix.length() > 1 ? prefix.substring(1) : "");
+        }
+        addMemberRow(currentName + " (You)", true, "Member");
+        memberCountBadge.setText("1 member");
         membersListContainer.revalidate();
         membersListContainer.repaint();
     }
@@ -262,19 +268,28 @@ public class RightInfoPanel extends JPanel {
             descLabel.setText("Conversation details");
         }
 
-        if (conv.getMembers() != null && !conv.getMembers().isEmpty()) {
-            membersListContainer.removeAll();
-            memberCountBadge.setText(conv.getMembers().size() + " members");
-            for (ConversationMember cm : conv.getMembers()) {
-                String mName = cm.getProfile() != null ? cm.getProfile().getEffectiveName() : "User";
-                String role = cm.getRole() == Role.OWNER ? "Owner" : "Member";
-                boolean online = cm.getProfile() != null && cm.getProfile().isOnline();
-                addMemberRow(mName, online, role);
-            }
-            membersListContainer.revalidate();
-            membersListContainer.repaint();
-        } else {
-            loadDefaultMembers();
-        }
+        // Fetch live group members
+        com.connectai.service.ChatService.getInstance().getGroupMembers(conv.getId())
+                .thenAccept(members -> {
+                    SwingUtilities.invokeLater(() -> {
+                        if (members != null && !members.isEmpty()) {
+                            membersListContainer.removeAll();
+                            memberCountBadge.setText(members.size() + (members.size() == 1 ? " member" : " members"));
+                            for (ConversationMember cm : members) {
+                                String mName = cm.getProfile() != null ? cm.getProfile().getEffectiveName() : "User";
+                                String role = cm.getRole() == Role.OWNER ? "Owner" : (cm.getRole() == Role.ADMIN ? "Admin" : "Member");
+                                boolean online = cm.getProfile() != null && cm.getProfile().isOnline();
+                                addMemberRow(mName, online, role);
+                            }
+                            membersListContainer.revalidate();
+                            membersListContainer.repaint();
+                        } else {
+                            loadDefaultMembers();
+                        }
+                    });
+                }).exceptionally(ex -> {
+                    SwingUtilities.invokeLater(this::loadDefaultMembers);
+                    return null;
+                });
     }
 }

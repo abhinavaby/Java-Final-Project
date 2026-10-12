@@ -4,9 +4,11 @@ import com.connectai.model.Profile;
 import com.connectai.model.User;
 import com.connectai.repository.AuthRepository;
 import com.connectai.repository.ProfileRepository;
+import com.connectai.util.HttpClientUtil;
 import com.connectai.util.JsonUtil;
 import java.io.File;
 import java.nio.file.Files;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class AuthService {
@@ -37,8 +39,15 @@ public class AuthService {
         return authRepository.signUp(email, password, username, displayName, avatarPath)
                 .thenCompose(user -> {
                     this.currentUser = user;
-                    saveSession(user);
-                    return loadCurrentProfile().thenApply(p -> user);
+                    // Only save session & load profile if signup gave us an access token
+                    // (i.e. email confirmation is disabled in Supabase settings)
+                    if (user.getAccessToken() != null && !user.getAccessToken().isBlank()) {
+                        saveSession(user);
+                        return loadCurrentProfile().thenApply(p -> user);
+                    }
+                    // Email confirmation required — return user without loading profile yet
+                    this.currentUser = null; // clear until confirmed
+                    return CompletableFuture.completedFuture(user);
                 });
     }
 
@@ -92,9 +101,26 @@ public class AuthService {
         }
         if (currentUser == null) return CompletableFuture.completedFuture(null);
         return profileRepository.getProfileById(currentUser.getId(), currentUser.getAccessToken())
-                .thenApply(profile -> {
-                    this.currentProfile = profile;
-                    return profile;
+                .thenCompose(profile -> {
+                    if (profile != null) {
+                        this.currentProfile = profile;
+                        return CompletableFuture.completedFuture(profile);
+                    }
+                    // Profile not found in DB: create fallback profile from user email
+                    String fallbackName = currentUser.getEmail() != null ? currentUser.getEmail().split("@")[0] : "User";
+                    Profile p = new Profile(currentUser.getId(), fallbackName.toLowerCase(), fallbackName, null);
+                    this.currentProfile = p;
+
+                    // Upsert profile into Supabase
+                    Map<String, Object> map = Map.of(
+                            "id", currentUser.getId(),
+                            "username", p.getUsername(),
+                            "display_name", p.getDisplayName(),
+                            "about", "Hey there! I am using ConnectAI."
+                    );
+                    HttpClientUtil.postAsync("/rest/v1/profiles", JsonUtil.toJson(map), currentUser.getAccessToken());
+
+                    return CompletableFuture.completedFuture(p);
                 });
     }
 
@@ -116,8 +142,17 @@ public class AuthService {
     public Profile getCurrentProfile() {
         if (com.connectai.config.AppConfig.isMockMode() && currentProfile == null) {
             this.currentProfile = com.connectai.mock.MockDataProvider.getInstance().getCurrentProfile();
+            return currentProfile;
         }
-        return currentProfile;
+        if (currentProfile != null) {
+            return currentProfile;
+        }
+        if (currentUser != null) {
+            String name = currentUser.getEmail() != null ? currentUser.getEmail().split("@")[0] : "User";
+            currentProfile = new Profile(currentUser.getId(), name.toLowerCase(), name, null);
+            return currentProfile;
+        }
+        return null;
     }
 
     public String getAccessToken() {

@@ -17,11 +17,41 @@ public class ConversationRepository {
     public CompletableFuture<List<ConversationMember>> getUserMemberships(String userId, String accessToken) {
         String path = "/rest/v1/conversation_members?user_id=eq." + userId + "&select=*,conversation:conversations(*)";
         return HttpClientUtil.getAsync(path, accessToken)
-                .thenApply(response -> {
+                .thenCompose(response -> {
                     if (response.statusCode() >= 400) {
                         throw new RuntimeException("Failed to load user conversations: " + response.body());
                     }
-                    return JsonUtil.fromJsonList(response.body(), ConversationMember.class);
+                    List<ConversationMember> list = JsonUtil.fromJsonList(response.body(), ConversationMember.class);
+                    if (list != null && !list.isEmpty()) {
+                        return CompletableFuture.completedFuture(list);
+                    }
+
+                    // Auto-enroll in default public channels
+                    String pubPath = "/rest/v1/conversations?is_private=eq.false&select=*";
+                    return HttpClientUtil.getAsync(pubPath, accessToken)
+                            .thenApply(pubRes -> {
+                                List<ConversationMember> defaultList = new java.util.ArrayList<>();
+                                if (pubRes.statusCode() < 400) {
+                                    List<Conversation> pubConvs = JsonUtil.fromJsonList(pubRes.body(), Conversation.class);
+                                    for (Conversation pc : pubConvs) {
+                                        // Auto-insert membership into Supabase in background
+                                        Map<String, Object> joinMap = Map.of(
+                                                "conversation_id", pc.getId(),
+                                                "user_id", userId,
+                                                "role", Role.MEMBER.name()
+                                        );
+                                        HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(joinMap), accessToken);
+
+                                        ConversationMember cm = new ConversationMember();
+                                        cm.setConversationId(pc.getId());
+                                        cm.setUserId(userId);
+                                        cm.setRole(Role.MEMBER);
+                                        cm.setConversation(pc);
+                                        defaultList.add(cm);
+                                    }
+                                }
+                                return defaultList;
+                            });
                 });
     }
 

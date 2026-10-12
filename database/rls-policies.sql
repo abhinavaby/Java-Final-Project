@@ -25,10 +25,11 @@ CREATE POLICY "Users can update their own profile"
     USING (auth.uid() = id);
 
 -- 2. Conversations Policies
-CREATE POLICY "Users can view conversations they belong to"
+CREATE POLICY "Users can view conversations they belong to or public channels"
     ON public.conversations FOR SELECT
     TO authenticated
     USING (
+        is_private = false OR
         EXISTS (
             SELECT 1 FROM public.conversation_members cm
             WHERE cm.conversation_id = conversations.id

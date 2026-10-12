@@ -122,16 +122,24 @@ public class AuthFrame extends JFrame {
 
         panel.add(Box.createVerticalGlue());
 
-        // 3. Status Badge
+        // 3. Supabase Cloud Status Row & Config Button
         JPanel badge = new RoundedPanel(12, ThemeColors.PRIMARY_ACCENT_LIGHT, Color.decode("#BFDBFE"));
         badge.setLayout(new FlowLayout(FlowLayout.CENTER, 8, 6));
         badge.setMaximumSize(new Dimension(300, 32));
         badge.setAlignmentX(Component.LEFT_ALIGNMENT);
+        badge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JLabel badgeText = new JLabel("⚡ Offline Mock & Supabase Cloud Ready");
+        JLabel badgeText = new JLabel(AppConfig.isSupabaseConfigured() ? "🟢 Supabase Connected" : "⚙️ Setup Supabase Backend");
         badgeText.setFont(ThemeFonts.CAPTION);
         badgeText.setForeground(ThemeColors.PRIMARY_ACCENT);
         badge.add(badgeText);
+
+        badge.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                showSupabaseConfigDialog();
+            }
+        });
 
         panel.add(badge);
 
@@ -247,22 +255,18 @@ public class AuthFrame extends JFrame {
         loginButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         loginButton.addActionListener(e -> performLogin());
 
-        // Secondary Action: Explore with Mock Data Button (Full width, soft blue)
-        PremiumButton mockModeButton = new PremiumButton("⚡ Explore Demo / Mock Workspace", ThemeColors.PRIMARY_ACCENT_LIGHT, ThemeColors.PRIMARY_ACCENT);
-        mockModeButton.setFont(ThemeFonts.BODY_BOLD);
-        mockModeButton.setPreferredSize(new Dimension(332, 40));
-        mockModeButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        mockModeButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mockModeButton.addActionListener(e -> {
-            AppConfig.setMockMode(true);
-            dispose();
-            SwingUtilities.invokeLater(() -> new MainChatFrame().setVisible(true));
-        });
+        // Secondary Action: Configure Supabase backend button
+        PremiumButton configBtn = new PremiumButton("⚙️ Supabase Settings", ThemeColors.MAIN_BG, ThemeColors.SECONDARY_TEXT);
+        configBtn.setFont(ThemeFonts.BODY_MEDIUM);
+        configBtn.setPreferredSize(new Dimension(332, 38));
+        configBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+        configBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        configBtn.addActionListener(e -> showSupabaseConfigDialog());
 
         card.add(loginButton);
-        card.add(Box.createVerticalStrut(10));
-        card.add(mockModeButton);
-        card.add(Box.createVerticalStrut(18));
+        card.add(Box.createVerticalStrut(8));
+        card.add(configBtn);
+        card.add(Box.createVerticalStrut(16));
 
         // Switch to Sign Up
         JPanel switchBox = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
@@ -397,10 +401,16 @@ public class AuthFrame extends JFrame {
     }
 
     private void performLogin() {
+        if (!AppConfig.isSupabaseConfigured()) {
+            ToastManager.showToast(this, "Please configure Supabase URL & Anon Key", ToastManager.ToastType.WARNING);
+            showSupabaseConfigDialog();
+            return;
+        }
+
         String email = loginEmailField.getText().trim();
         String password = loginPasswordField.getPasswordString();
 
-        if (email.isBlank() || password.isBlank() || email.contains("name@work-email.com")) {
+        if (email.isBlank() || password.isBlank()) {
             ToastManager.showToast(this, "Please fill in email and password", ToastManager.ToastType.WARNING);
             return;
         }
@@ -422,14 +432,24 @@ public class AuthFrame extends JFrame {
                     dispose();
                     SwingUtilities.invokeLater(() -> new MainChatFrame().setVisible(true));
                 } catch (Exception ex) {
-                    ToastManager.showToast(AuthFrame.this, "Login failed: " + ex.getCause().getMessage(),
-                            ToastManager.ToastType.ERROR);
+                    String msg = extractErrorMessage(ex);
+                    // Provide a friendly message for email confirmation requirement
+                    if (msg.toLowerCase().contains("email not confirmed") || msg.toLowerCase().contains("email_not_confirmed")) {
+                        msg = "Please check your email inbox and confirm your account before logging in.";
+                    }
+                    ToastManager.showToast(AuthFrame.this, "Login failed: " + msg, ToastManager.ToastType.ERROR);
                 }
             }
         }.execute();
     }
 
     private void performRegistration() {
+        if (!AppConfig.isSupabaseConfigured()) {
+            ToastManager.showToast(this, "Please configure Supabase URL & Anon Key", ToastManager.ToastType.WARNING);
+            showSupabaseConfigDialog();
+            return;
+        }
+
         String displayName = regNameField.getText().trim();
         String username = regUserField.getText().trim();
         String email = regEmailField.getText().trim();
@@ -446,6 +466,11 @@ public class AuthFrame extends JFrame {
             return;
         }
 
+        if (password.length() < 6) {
+            ToastManager.showToast(this, "Password must be at least 6 characters", ToastManager.ToastType.WARNING);
+            return;
+        }
+
         registerButton.setEnabled(false);
         new SwingWorker<Void, Void>() {
             @Override
@@ -459,15 +484,152 @@ public class AuthFrame extends JFrame {
                 registerButton.setEnabled(true);
                 try {
                     get();
-                    ToastManager.showToast(AuthFrame.this, "Account created successfully!",
+                    // Show confirmation email notice instead of going directly to chat
+                    ToastManager.showToast(AuthFrame.this,
+                            "Account created! Please check your email to confirm your account.",
                             ToastManager.ToastType.SUCCESS);
-                    dispose();
-                    SwingUtilities.invokeLater(() -> new MainChatFrame().setVisible(true));
+                    // Switch back to login screen so user can log in after confirmation
+                    cardLayout.show(cardsPanel, "LOGIN");
                 } catch (Exception ex) {
-                    ToastManager.showToast(AuthFrame.this, "Sign up failed: " + ex.getCause().getMessage(),
-                            ToastManager.ToastType.ERROR);
+                    String msg = extractErrorMessage(ex);
+                    if (msg.toLowerCase().contains("already registered") || msg.toLowerCase().contains("user already exists")) {
+                        msg = "An account with this email already exists. Please log in instead.";
+                    }
+                    ToastManager.showToast(AuthFrame.this, "Sign up failed: " + msg, ToastManager.ToastType.ERROR);
                 }
             }
         }.execute();
+    }
+
+    /**
+     * Safely extracts a clean, user-friendly error message from an exception chain.
+     * Recursively unwraps causes and strips all Java class name prefixes.
+     */
+    private String extractErrorMessage(Exception ex) {
+        if (ex == null) return "An error occurred. Please try again.";
+
+        // Unwrap the full cause chain to find the deepest meaningful message
+        Throwable t = ex;
+        String bestMsg = null;
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && !msg.isBlank()) {
+                bestMsg = msg;
+            }
+            t = t.getCause();
+        }
+
+        if (bestMsg == null) return "An error occurred. Please try again.";
+
+        // Strip common Java exception class prefixes
+        for (String prefix : new String[]{
+                "java.lang.RuntimeException: ",
+                "java.util.concurrent.ExecutionException: ",
+                "java.io.IOException: "
+        }) {
+            if (bestMsg.startsWith(prefix)) {
+                bestMsg = bestMsg.substring(prefix.length());
+            }
+        }
+
+        // Map common Supabase error messages to friendly text
+        String lower = bestMsg.toLowerCase();
+        if (lower.contains("over_email_send_rate_limit") || lower.contains("email rate limit")) {
+            return "Too many signup attempts. Please wait a few minutes and try again, or disable email confirmation in your Supabase dashboard.";
+        }
+        if (lower.contains("email_not_confirmed") || lower.contains("email not confirmed")) {
+            return "Please check your inbox and confirm your email before logging in.";
+        }
+        if (lower.contains("invalid_credentials") || lower.contains("invalid login credentials")) {
+            return "Incorrect email or password.";
+        }
+        if (lower.contains("user already registered") || lower.contains("already registered")) {
+            return "This email is already registered. Please log in instead.";
+        }
+        if (lower.contains("password should be at least")) {
+            return "Password must be at least 6 characters.";
+        }
+
+        return bestMsg;
+    }
+
+    public void showSupabaseConfigDialog() {
+        javax.swing.JDialog dialog = new javax.swing.JDialog(this, "Connect to Supabase", true);
+        dialog.setSize(480, 420);
+        dialog.setLocationRelativeTo(this);
+
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
+
+        JLabel title = new JLabel("Supabase Backend Settings");
+        title.setFont(new Font("SansSerif", Font.BOLD, 18));
+        title.setForeground(ThemeColors.PRIMARY_TEXT);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel desc = new JLabel("<html><body style='width: 380px; color: #64748B; font-size: 11px;'>"
+                + "Enter your Supabase Project URL and Public Anon Key. You can find both in your Supabase Dashboard under <b>Project Settings &gt; API</b>."
+                + "</body></html>");
+        desc.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel urlLabel = new JLabel("Supabase Project URL");
+        urlLabel.setFont(ThemeFonts.BODY_BOLD);
+        urlLabel.setForeground(ThemeColors.SECONDARY_TEXT);
+        urlLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        RoundedTextField urlField = new RoundedTextField("https://your-project.supabase.co");
+        urlField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        String currentUrl = AppConfig.getSupabaseUrl();
+        if (!currentUrl.contains("xyzcompany")) {
+            urlField.setText(currentUrl);
+        }
+
+        JLabel keyLabel = new JLabel("Supabase Anon / Public Key");
+        keyLabel.setFont(ThemeFonts.BODY_BOLD);
+        keyLabel.setForeground(ThemeColors.SECONDARY_TEXT);
+        keyLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        RoundedTextField keyField = new RoundedTextField("eyJhbGciOi...");
+        keyField.setAlignmentX(Component.LEFT_ALIGNMENT);
+        String currentKey = AppConfig.getSupabaseAnonKey();
+        if (!currentKey.contains("example_anon_key")) {
+            keyField.setText(currentKey);
+        }
+
+        PremiumButton saveBtn = new PremiumButton("Save & Connect to Supabase", ThemeColors.PRIMARY_ACCENT, Color.WHITE);
+        saveBtn.setFont(ThemeFonts.BODY_BOLD);
+        saveBtn.setPreferredSize(new Dimension(380, 40));
+        saveBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        saveBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        saveBtn.addActionListener(ev -> {
+            String u = urlField.getText().trim();
+            String k = keyField.getText().trim();
+            if (u.isBlank() || k.isBlank() || u.contains("your-project") || k.contains("eyJhbGciOi...")) {
+                ToastManager.showToast(this, "Please enter valid Supabase URL and Anon Key", ToastManager.ToastType.WARNING);
+                return;
+            }
+            AppConfig.updateSupabaseCredentials(u, k);
+            ToastManager.showToast(this, "Supabase credentials saved successfully!", ToastManager.ToastType.SUCCESS);
+            dialog.dispose();
+            repaint();
+        });
+
+        panel.add(title);
+        panel.add(Box.createVerticalStrut(6));
+        panel.add(desc);
+        panel.add(Box.createVerticalStrut(18));
+        panel.add(urlLabel);
+        panel.add(Box.createVerticalStrut(4));
+        panel.add(urlField);
+        panel.add(Box.createVerticalStrut(12));
+        panel.add(keyLabel);
+        panel.add(Box.createVerticalStrut(4));
+        panel.add(keyField);
+        panel.add(Box.createVerticalStrut(22));
+        panel.add(saveBtn);
+
+        dialog.setContentPane(panel);
+        dialog.setVisible(true);
     }
 }

@@ -26,7 +26,9 @@ public class AuthRepository {
                     if (response.statusCode() >= 400) {
                         throw new RuntimeException(extractErrorMessage(response.body(), "Registration failed"));
                     }
-                    return parseUserFromAuthJson(response.body());
+                    // If email confirmation is required, Supabase returns user data but no access_token.
+                    // We return a partial User object; the app will prompt the user to confirm their email.
+                    return parseUserFromSignupJson(response.body());
                 });
     }
 
@@ -81,6 +83,38 @@ public class AuthRepository {
             return user;
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse auth response: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Parses the signup response from Supabase.
+     * When email confirmation is enabled, the response contains only user data (no access_token).
+     * When email confirmation is disabled, the response contains a full session with access_token.
+     */
+    private User parseUserFromSignupJson(String json) {
+        try {
+            JsonNode node = JsonUtil.getMapper().readTree(json);
+
+            // Check if response has a session (email confirmation disabled)
+            if (node.has("access_token") && !node.path("access_token").asText("").isBlank()) {
+                return parseUserFromAuthJson(json);
+            }
+
+            // Email confirmation required — extract user fields
+            JsonNode userNode = node.has("user") ? node.path("user") : node;
+            String id = userNode.path("id").asText(null);
+            String email = userNode.path("email").asText(null);
+
+            if (id == null || id.isBlank()) {
+                throw new RuntimeException("Signup failed: unable to parse user ID from response");
+            }
+
+            // Return partial user (no tokens yet — user must confirm email first)
+            return new User(id, email, null, null);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse signup response: " + e.getMessage(), e);
         }
     }
 

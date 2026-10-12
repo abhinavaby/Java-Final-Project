@@ -189,6 +189,9 @@ public class ConversationListPanel extends JPanel {
         pill.repaint();
     }
 
+    private AvatarComponent userAvatar;
+    private JLabel userNameLabel;
+
     private JPanel createUserFooter() {
         JPanel footer = new JPanel(new BorderLayout());
         footer.setOpaque(false);
@@ -201,25 +204,26 @@ public class ConversationListPanel extends JPanel {
         JPanel userBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         userBox.setOpaque(false);
 
-        AvatarComponent av = new AvatarComponent(36, "Alex Rivera", true);
-        av.setCustomColors(ThemeColors.AVATAR_DARK_BG, ThemeColors.AVATAR_DARK_FG);
+        String initialName = getEffectiveCurrentUserName();
+        userAvatar = new AvatarComponent(36, initialName, true);
+        userAvatar.setCustomColors(ThemeColors.AVATAR_DARK_BG, ThemeColors.AVATAR_DARK_FG);
 
         JPanel info = new JPanel();
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
         info.setOpaque(false);
 
-        JLabel name = new JLabel("Alex Rivera");
-        name.setFont(ThemeFonts.BODY_BOLD);
-        name.setForeground(ThemeColors.PRIMARY_TEXT);
+        userNameLabel = new JLabel(initialName);
+        userNameLabel.setFont(ThemeFonts.BODY_BOLD);
+        userNameLabel.setForeground(ThemeColors.PRIMARY_TEXT);
 
         JLabel role = new JLabel("● Online");
         role.setFont(ThemeFonts.CAPTION);
         role.setForeground(ThemeColors.SUCCESS_ONLINE);
 
-        info.add(name);
+        info.add(userNameLabel);
         info.add(role);
 
-        userBox.add(av);
+        userBox.add(userAvatar);
         userBox.add(info);
 
         IconButton settingsBtn = new IconButton("⚙", "Settings");
@@ -232,6 +236,30 @@ public class ConversationListPanel extends JPanel {
         footer.add(userBox, BorderLayout.WEST);
         footer.add(settingsBtn, BorderLayout.EAST);
         return footer;
+    }
+
+    public void updateCurrentUserDisplay() {
+        String name = getEffectiveCurrentUserName();
+        if (userNameLabel != null) {
+            userNameLabel.setText(name);
+        }
+        if (userAvatar != null) {
+            userAvatar.setDisplayName(name);
+            userAvatar.repaint();
+        }
+    }
+
+    private String getEffectiveCurrentUserName() {
+        com.connectai.model.Profile p = AuthService.getInstance().getCurrentProfile();
+        if (p != null && p.getDisplayName() != null && !p.getDisplayName().isBlank()) {
+            return p.getDisplayName();
+        }
+        com.connectai.model.User u = AuthService.getInstance().getCurrentUser();
+        if (u != null && u.getEmail() != null && !u.getEmail().isBlank()) {
+            String prefix = u.getEmail().split("@")[0];
+            return Character.toUpperCase(prefix.charAt(0)) + (prefix.length() > 1 ? prefix.substring(1) : "");
+        }
+        return "You";
     }
 
     private void applyFilter() {
@@ -343,8 +371,10 @@ public class ConversationListPanel extends JPanel {
     }
 
     public void refreshConversations() {
+        updateCurrentUserDisplay();
         ChatService.getInstance().loadUserConversations().thenAccept(memberships -> {
             SwingUtilities.invokeLater(() -> {
+                updateCurrentUserDisplay();
                 allConversations.clear();
                 for (ConversationMember cm : memberships) {
                     if (cm.getConversation() != null) {
@@ -364,6 +394,12 @@ public class ConversationListPanel extends JPanel {
                     onConversationSelected.accept(allConversations.get(0));
                 }
             });
+        }).exceptionally(ex -> {
+            SwingUtilities.invokeLater(() -> {
+                updateCurrentUserDisplay();
+                System.err.println("Failed to load user conversations: " + ex.getMessage());
+            });
+            return null;
         });
     }
 }

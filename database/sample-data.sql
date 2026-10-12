@@ -1,18 +1,20 @@
--- ConnectAI Sample Data Script
--- Instructions: Execute after creating user accounts via Supabase Auth
+-- ============================================================================
+-- ConnectAI Public Channels & Verification Script
+-- ============================================================================
 
--- Sample query to check registered profiles
-SELECT id, username, display_name, created_at FROM public.profiles;
+-- 1. Check the 3 default public channels
+SELECT id, name, description, invite_code, is_private
+FROM public.conversations
+ORDER BY created_at ASC;
 
--- Sample query to manually create a public test group if desired:
-/*
-INSERT INTO public.conversations (id, type, name, description, invite_code, is_private)
-VALUES (
-    '11111111-1111-1111-1111-111111111111',
-    'GROUP',
-    'General Lounge',
-    'Welcome to ConnectAI public discussion lounge!',
-    'CONNECT2026',
-    false
-);
-*/
+-- 2. Check registered profiles
+SELECT id, username, display_name, created_at
+FROM public.profiles
+ORDER BY created_at DESC;
+
+-- 3. Check channel memberships (All registered users should belong to all 3 channels)
+SELECT c.name AS channel_name, p.display_name AS member_name, cm.role
+FROM public.conversation_members cm
+JOIN public.conversations c ON c.id = cm.conversation_id
+JOIN public.profiles p ON p.id = cm.user_id
+ORDER BY c.name, p.display_name;
