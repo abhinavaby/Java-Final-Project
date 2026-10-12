@@ -32,7 +32,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Build and test
-        run: mvn --batch-mode clean package -DargLine=-Djava.awt.headless=true
+        shell: bash
+        run: mvn --batch-mode clean package "-DargLine=-Djava.awt.headless=true"
       - name: Package with included Java runtime
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Package on the target OS; only public Supabase settings enter the app."""
-import argparse, os, pathlib, platform, shutil, subprocess
+import argparse, os, pathlib, platform, shutil, subprocess, re
 parser = argparse.ArgumentParser()
 parser.add_argument('--type', choices=['dmg', 'exe', 'app-image'], required=True)
-parser.add_argument('--version', default='1.0.0')
+release_version = os.environ.get('GITHUB_REF_NAME', '').removeprefix('v')
+parser.add_argument('--version', default=release_version if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', release_version) else '1.0.0')
 parser.add_argument('--label', default='mac-arm64')
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
