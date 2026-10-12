@@ -173,7 +173,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -189,12 +189,20 @@ BEGIN
     WHERE id = NEW.conversation_id;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_new_message_update_conversation ON public.messages;
 CREATE TRIGGER on_new_message_update_conversation
     AFTER INSERT ON public.messages
     FOR EACH ROW EXECUTE FUNCTION public.update_conversation_timestamp();
+
+-- Restore profiles for accounts created before this script was installed.
+INSERT INTO public.profiles (id, username, display_name, avatar_path)
+SELECT id, 'user_' || replace(id::text, '-', ''),
+       COALESCE(NULLIF(raw_user_meta_data->>'display_name', ''), split_part(email, '@', 1), 'User'),
+       raw_user_meta_data->>'avatar_path'
+FROM auth.users
+ON CONFLICT (id) DO NOTHING;
 
 -- Backfill: Ensure all existing profiles belong to the three public channels
 INSERT INTO public.conversation_members (conversation_id, user_id, role)
@@ -234,16 +242,28 @@ CREATE POLICY "Users can update their own profile"
     ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
 -- 2. Conversations Policies
+-- Avoid recursive RLS queries by checking membership through a narrowly scoped helper.
+CREATE OR REPLACE FUNCTION public.is_conversation_member(target_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+    SELECT EXISTS (SELECT 1 FROM public.conversation_members
+        WHERE conversation_id = target_id AND user_id = auth.uid());
+$$;
+CREATE OR REPLACE FUNCTION public.is_conversation_admin(target_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+    SELECT EXISTS (SELECT 1 FROM public.conversation_members
+        WHERE conversation_id = target_id AND user_id = auth.uid() AND role IN ('OWNER', 'ADMIN'));
+$$;
+REVOKE ALL ON FUNCTION public.is_conversation_member(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_conversation_admin(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_conversation_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_conversation_admin(uuid) TO authenticated;
+
 DROP POLICY IF EXISTS "Users can view conversations they belong to or public channels" ON public.conversations;
 CREATE POLICY "Users can view conversations they belong to or public channels"
     ON public.conversations FOR SELECT TO authenticated
     USING (
-        is_private = false OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversations.id
-            AND cm.user_id = auth.uid()
-        )
+        created_by = auth.uid() OR is_private = false OR
+        public.is_conversation_member(conversations.id)
     );
 
 DROP POLICY IF EXISTS "Authenticated users can create conversations" ON public.conversations;
@@ -255,12 +275,7 @@ DROP POLICY IF EXISTS "Owners and admins can update conversations" ON public.con
 CREATE POLICY "Owners and admins can update conversations"
     ON public.conversations FOR UPDATE TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversations.id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversations.id)
     );
 
 -- 3. Conversation Members Policies
@@ -268,11 +283,7 @@ DROP POLICY IF EXISTS "Members can view members of their conversations" ON publi
 CREATE POLICY "Members can view members of their conversations"
     ON public.conversation_members FOR SELECT TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-        )
+        public.is_conversation_member(conversation_members.conversation_id)
     );
 
 DROP POLICY IF EXISTS "Users can insert themselves or admins can add members" ON public.conversation_members;
@@ -280,12 +291,7 @@ CREATE POLICY "Users can insert themselves or admins can add members"
     ON public.conversation_members FOR INSERT TO authenticated
     WITH CHECK (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 DROP POLICY IF EXISTS "Users can update their own membership state or admins can update roles" ON public.conversation_members;
@@ -293,12 +299,7 @@ CREATE POLICY "Users can update their own membership state or admins can update 
     ON public.conversation_members FOR UPDATE TO authenticated
     USING (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 DROP POLICY IF EXISTS "Users can leave or admins can remove members" ON public.conversation_members;
@@ -306,12 +307,7 @@ CREATE POLICY "Users can leave or admins can remove members"
     ON public.conversation_members FOR DELETE TO authenticated
     USING (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 -- 4. Messages Policies
@@ -469,3 +465,41 @@ EXCEPTION WHEN OTHERS THEN
     NULL;
 END;
 $$;
+
+-- Explicit privileges for authenticated Data API requests.
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.profiles, public.conversations, public.messages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.conversation_members TO authenticated;
+GRANT SELECT ON public.attachments, public.polls, public.poll_options, public.message_reactions TO authenticated;
+DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+CREATE POLICY "Users can insert their own profile" ON public.profiles
+FOR INSERT TO authenticated WITH CHECK (id = auth.uid());
+
+-- Run in Supabase SQL Editor after the app tables have been created.
+BEGIN;
+GRANT DELETE ON public.conversations TO authenticated;
+DROP POLICY IF EXISTS "Creators can delete their groups" ON public.conversations;
+CREATE POLICY "Creators can delete their groups" ON public.conversations
+FOR DELETE TO authenticated USING (type = 'GROUP' AND created_by = auth.uid());
+
+GRANT SELECT, INSERT ON public.attachments TO authenticated;
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('chat-attachments', 'chat-attachments', false, 52428800)
+ON CONFLICT (id) DO UPDATE SET file_size_limit = EXCLUDED.file_size_limit;
+
+-- Replace the previous broad storage policies with conversation membership checks.
+DROP POLICY IF EXISTS "Authenticated users can upload attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can read attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Chat members can upload files" ON storage.objects;
+DROP POLICY IF EXISTS "Chat members can read files" ON storage.objects;
+CREATE POLICY "Chat members can upload files" ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'chat-attachments' AND EXISTS (
+    SELECT 1 FROM public.conversation_members cm
+    WHERE cm.user_id = auth.uid() AND cm.conversation_id::text = (storage.foldername(name))[1]
+));
+CREATE POLICY "Chat members can read files" ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'chat-attachments' AND EXISTS (
+    SELECT 1 FROM public.conversation_members cm
+    WHERE cm.user_id = auth.uid() AND cm.conversation_id::text = (storage.foldername(name))[1]
+));
+COMMIT;

@@ -31,10 +31,9 @@ public class ToastManager {
     public static void showToast(Component parent, String message, ToastType type) {
         if (parent == null) return;
 
-        JFrame frameCandidate = (JFrame) javax.swing.SwingUtilities.getWindowAncestor(parent);
-        if (frameCandidate == null && parent instanceof JFrame) frameCandidate = (JFrame) parent;
-        if (frameCandidate == null) return;
-        final JFrame frame = frameCandidate;
+        javax.swing.JRootPane root = javax.swing.SwingUtilities.getRootPane(parent);
+        if (root == null) return;
+        javax.swing.JLayeredPane layer = root.getLayeredPane();
 
         RoundedPanel toastPanel = new RoundedPanel(12, ThemeColors.ELEVATED_SURFACE, type.color);
         toastPanel.setLayout(new BorderLayout(10, 0));
@@ -44,25 +43,31 @@ public class ToastManager {
         iconLabel.setFont(ThemeFonts.TITLE_MEDIUM);
         iconLabel.setForeground(type.color);
 
-        JLabel msgLabel = new JLabel(message);
+        JLabel msgLabel = new JLabel("<html>" + escapeHtml(message) + "</html>");
         msgLabel.setFont(ThemeFonts.BODY_MEDIUM);
         msgLabel.setForeground(ThemeColors.PRIMARY_TEXT);
 
         toastPanel.add(iconLabel, BorderLayout.WEST);
         toastPanel.add(msgLabel, BorderLayout.CENTER);
 
-        toastPanel.setSize(new Dimension(320, 48));
-        int x = frame.getWidth() - 340;
+        int width = Math.max(200, Math.min(460, layer.getWidth() - 32));
+        msgLabel.setSize(width - 72, Short.MAX_VALUE);
+        int height = Math.max(48, msgLabel.getPreferredSize().height + 24);
+        toastPanel.setSize(new Dimension(width, height));
+        int x = Math.max(8, layer.getWidth() - width - 16);
         int y = 40;
         toastPanel.setLocation(x, y);
 
-        frame.getLayeredPane().add(toastPanel, javax.swing.JLayeredPane.POPUP_LAYER);
-        frame.getLayeredPane().repaint();
+        layer.add(toastPanel, javax.swing.JLayeredPane.POPUP_LAYER);
+        layer.repaint();
 
-        new javax.swing.Timer(3000, e -> {
-            frame.getLayeredPane().remove(toastPanel);
-            frame.getLayeredPane().repaint();
+        new javax.swing.Timer(type == ToastType.ERROR ? 10000 : 5000, e -> {
+            layer.remove(toastPanel);
+            layer.repaint();
             ((javax.swing.Timer) e.getSource()).stop();
         }).start();
+    }
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
     }
 }

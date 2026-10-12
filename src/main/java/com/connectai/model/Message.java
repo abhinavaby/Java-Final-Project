@@ -34,6 +34,7 @@ public class Message {
 
     // Transient & Helper fields
     private MessageStatus status = MessageStatus.SENT;
+    @JsonProperty("sender_profile")
     private Profile senderProfile;
     private Message replyMessage;
     private Attachment attachment;

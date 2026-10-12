@@ -54,15 +54,15 @@ public class PasswordFieldWithToggle extends JPanel implements FocusListener {
         passwordField.setBorder(BorderFactory.createEmptyBorder(ThemeSpacing.S, ThemeSpacing.M, ThemeSpacing.S, ThemeSpacing.M));
         passwordField.addFocusListener(this);
 
-        toggleButton = new IconButton("👁", "Toggle password visibility");
+        toggleButton = new IconButton("Show", "Toggle password visibility");
         toggleButton.addActionListener(e -> {
             showPassword = !showPassword;
             if (showPassword) {
                 passwordField.setEchoChar((char) 0);
-                toggleButton.setText("🙈");
+                toggleButton.setText("Hide");
             } else {
                 passwordField.setEchoChar('•');
-                toggleButton.setText("👁");
+                toggleButton.setText("Show");
             }
         });
 

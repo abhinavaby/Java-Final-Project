@@ -35,7 +35,7 @@ public class ForgotPasswordDialog extends JDialog {
         title.setFont(ThemeFonts.TITLE_MEDIUM);
         title.setForeground(ThemeColors.PRIMARY_TEXT);
 
-        JLabel info = new JLabel("Enter your registered email address to receive a password reset link.");
+        JLabel info = new JLabel("<html>Enter your account email. We’ll send a password reset link.</html>");
         info.setFont(ThemeFonts.BODY_MEDIUM);
         info.setForeground(ThemeColors.SECONDARY_TEXT);
 
@@ -87,7 +87,7 @@ public class ForgotPasswordDialog extends JDialog {
                 btn.setEnabled(true);
                 try {
                     if (get()) {
-                        ToastManager.showToast(ForgotPasswordDialog.this, "Reset link sent! Check your inbox.",
+                        ToastManager.showToast(getOwner(), "If this email has an account, a reset link will arrive shortly.",
                                 ToastManager.ToastType.SUCCESS);
                         dispose();
                     } else {
@@ -95,7 +95,7 @@ public class ForgotPasswordDialog extends JDialog {
                                 ToastManager.ToastType.ERROR);
                     }
                 } catch (Exception ex) {
-                    ToastManager.showToast(ForgotPasswordDialog.this, "Error: " + ex.getMessage(),
+                    ToastManager.showToast(ForgotPasswordDialog.this, com.connectai.util.ErrorMessages.from(ex),
                             ToastManager.ToastType.ERROR);
                 }
             }

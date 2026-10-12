@@ -39,12 +39,12 @@ public class SplashScreen extends JFrame {
         centerPanel.setLayout(new javax.swing.BoxLayout(centerPanel, javax.swing.BoxLayout.Y_AXIS));
         centerPanel.setOpaque(false);
 
-        JLabel logoLabel = new JLabel("⚡ " + AppConfig.getAppName(), SwingConstants.CENTER);
+        JLabel logoLabel = new JLabel("" + AppConfig.getAppName(), SwingConstants.CENTER);
         logoLabel.setFont(ThemeFonts.TITLE_LARGE.deriveFont(32.0f));
         logoLabel.setForeground(ThemeColors.PRIMARY_ACCENT);
         logoLabel.setAlignmentX(CENTER_ALIGNMENT);
 
-        JLabel taglineLabel = new JLabel("Connect. Collaborate. Create with AI.", SwingConstants.CENTER);
+        JLabel taglineLabel = new JLabel("Your team, in one place.", SwingConstants.CENTER);
         taglineLabel.setFont(ThemeFonts.BODY_MEDIUM);
         taglineLabel.setForeground(ThemeColors.SECONDARY_TEXT);
         taglineLabel.setAlignmentX(CENTER_ALIGNMENT);

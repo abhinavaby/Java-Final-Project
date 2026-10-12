@@ -57,6 +57,13 @@ public class ChatService {
         return conversationRepository.createGroupConversation(name, description, userId, isPrivate, token);
     }
 
+    public CompletableFuture<Void> deleteGroup(Conversation group) {
+        if (group.getType() != com.connectai.model.ConversationType.GROUP ||
+                !AuthService.getInstance().getCurrentUser().getId().equals(group.getCreatedBy()))
+            return CompletableFuture.failedFuture(new IllegalStateException("Only the group creator can delete it."));
+        return conversationRepository.deleteGroup(group.getId(), AuthService.getInstance().getAccessToken());
+    }
+
     public CompletableFuture<Conversation> joinGroupByCode(String inviteCode) {
         if (com.connectai.config.AppConfig.isMockMode()) {
             return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().joinGroupByInviteCode(inviteCode));

@@ -38,8 +38,11 @@ public class RightInfoPanel extends JPanel {
     private JPanel membersListContainer;
     private JLabel memberCountBadge;
     private Runnable onCloseCallback;
+    private Runnable onDeletedCallback;
+    private javax.swing.JButton deleteGroupButton;
 
-    public RightInfoPanel(Runnable onCloseCallback) {
+    public RightInfoPanel(Runnable onCloseCallback, Runnable onDeletedCallback) {
+        this.onDeletedCallback = onDeletedCallback;
         this.onCloseCallback = onCloseCallback;
         setLayout(new BorderLayout());
         setBackground(ThemeColors.SIDEBAR_BG);
@@ -160,6 +163,13 @@ public class RightInfoPanel extends JPanel {
         codeCard.add(copyBtn, BorderLayout.EAST);
 
         body.add(codeCard);
+        body.add(Box.createVerticalStrut(16));
+        deleteGroupButton = new javax.swing.JButton("Delete group");
+        deleteGroupButton.setForeground(ThemeColors.ERROR);
+        deleteGroupButton.setAlignmentX(CENTER_ALIGNMENT);
+        deleteGroupButton.setVisible(false);
+        deleteGroupButton.addActionListener(e -> deleteCurrentGroup());
+        body.add(deleteGroupButton);
 
         JScrollPane scroll = new JScrollPane(body);
         scroll.setBorder(null);
@@ -255,6 +265,9 @@ public class RightInfoPanel extends JPanel {
         this.conversation = conv;
         if (conv == null) return;
 
+        deleteGroupButton.setVisible(conv.getType() == com.connectai.model.ConversationType.GROUP
+                && com.connectai.service.AuthService.getInstance().getCurrentUser() != null
+                && com.connectai.service.AuthService.getInstance().getCurrentUser().getId().equals(conv.getCreatedBy()));
         nameLabel.setText(conv.getDisplayTitle());
         profileAvatar.setDisplayName(conv.getDisplayTitle());
 
@@ -291,5 +304,20 @@ public class RightInfoPanel extends JPanel {
                     SwingUtilities.invokeLater(this::loadDefaultMembers);
                     return null;
                 });
+    }
+    private void deleteCurrentGroup() {
+        if (conversation == null) return;
+        Conversation target = conversation;
+        if (javax.swing.JOptionPane.showConfirmDialog(this,
+                "Delete this group and all its messages? This cannot be undone.", "Delete group",
+                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE)
+                != javax.swing.JOptionPane.OK_OPTION) return;
+        deleteGroupButton.setEnabled(false);
+        com.connectai.service.ChatService.getInstance().deleteGroup(target).whenComplete((ignored, error) ->
+                SwingUtilities.invokeLater(() -> {
+                    deleteGroupButton.setEnabled(true);
+                    if (error != null) ToastManager.showToast(this, com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR);
+                    else if (onDeletedCallback != null) onDeletedCallback.run();
+                }));
     }
 }

@@ -87,7 +87,11 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
         centerCardContainer.add(activeChatView, "CHAT");
 
         // 3. Right Info Panel (clean collapsible panel)
-        rightInfoPanel = new RightInfoPanel(this::toggleRightPanel);
+        rightInfoPanel = new RightInfoPanel(this::toggleRightPanel, () -> {
+            openConversation(null);
+            rightInfoPanel.setVisible(false);
+            leftSidebarPanel.refreshConversations();
+        });
         rightInfoPanel.setVisible(false);
 
         rootPanel.add(leftSidebarPanel, BorderLayout.WEST);
@@ -95,12 +99,16 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
         rootPanel.add(rightInfoPanel, BorderLayout.EAST);
 
         setContentPane(rootPanel);
+        String profileWarning = AuthService.getInstance().consumeProfileLoadWarning();
+        if (profileWarning != null) SwingUtilities.invokeLater(() ->
+                com.connectai.ui.components.ToastManager.showToast(this, profileWarning,
+                        com.connectai.ui.components.ToastManager.ToastType.WARNING));
 
         // Connect Realtime client
         SupabaseRealtimeClient.getInstance().addListener(this);
         SupabaseRealtimeClient.getInstance().connect();
 
-        centerCardLayout.show(centerCardContainer, "CHAT");
+        centerCardLayout.show(centerCardContainer, "EMPTY");
     }
 
     private void openConversation(Conversation conv) {
@@ -121,16 +129,18 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
     private void reloadActiveMessages() {
         if (activeConversation == null) return;
 
+        String requestedConversationId = activeConversation.getId();
         new SwingWorker<List<Message>, Void>() {
             @Override
             protected List<Message> doInBackground() throws Exception {
-                return ChatService.getInstance().loadMessages(activeConversation.getId(), 50, 0).get();
+                return ChatService.getInstance().loadMessages(requestedConversationId, 50, 0).get();
             }
 
             @Override
             protected void done() {
                 try {
                     List<Message> msgs = get();
+                    if (activeConversation == null || !requestedConversationId.equals(activeConversation.getId())) return;
                     messageListContainer.removeAll();
 
                     // Centered "Today" Date Badge pill
@@ -144,7 +154,7 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                     // Messages come ordered desc from DB, reverse to render chronologically
                     for (int i = msgs.size() - 1; i >= 0; i--) {
                         Message m = msgs.get(i);
-                        boolean isOutgoing = m.getSenderId().equals(currentUserId);
+                        boolean isOutgoing = currentUserId.equals(m.getSenderId());
                         MessageBubble bubble = new MessageBubble(
                                 m, isOutgoing,
                                 replyMsg -> composerPanel.setReplyToMessage(replyMsg),
@@ -158,7 +168,12 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                     messageListContainer.revalidate();
                     messageListContainer.repaint();
                     scrollToBottom();
-                } catch (Exception ignored) {}
+                } catch (Exception error) {
+                    if (activeConversation != null && requestedConversationId.equals(activeConversation.getId()))
+                        com.connectai.ui.components.ToastManager.showToast(MainChatFrame.this,
+                                "Could not display messages: " + com.connectai.util.ErrorMessages.from(error),
+                                com.connectai.ui.components.ToastManager.ToastType.ERROR);
+                }
             }
         }.execute();
     }

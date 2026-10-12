@@ -14,6 +14,20 @@ public class HttpClientUtil {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
+    public static CompletableFuture<Void> checkSupabaseConnection(String url, String key) {
+        AppConfig.validateSupabaseCredentials(url, key);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url.trim().replaceAll("/+$", "") + "/auth/v1/settings"))
+                .timeout(Duration.ofSeconds(15)).header("apikey", key.trim()).GET().build();
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
+            if (response.statusCode() == 401 || response.statusCode() == 403)
+                throw new IllegalStateException("The project rejected this key. Check that the URL and key belong to the same project.");
+            if (response.statusCode() >= 300)
+                throw new IllegalStateException("Could not connect to Supabase (HTTP " + response.statusCode() + "). Check the project URL and project status.");
+            return null;
+        });
+    }
+
     public static CompletableFuture<HttpResponse<String>> getAsync(String pathOrUrl, String bearerToken) {
         String fullUrl = buildFullUrl(pathOrUrl);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -36,7 +50,9 @@ public class HttpClientUtil {
                 .timeout(Duration.ofSeconds(20))
                 .header("apikey", AppConfig.getSupabaseAnonKey())
                 .header("Content-Type", "application/json")
-                .header("Accept", "application/json");
+                .header("Accept", "application/json")
+                .header("Prefer", (pathOrUrl.startsWith("/rest/v1/conversations?") || pathOrUrl.startsWith("/rest/v1/messages?") || pathOrUrl.startsWith("/rest/v1/attachments?"))
+                        ? "return=representation" : "return=minimal");
 
         if (bearerToken != null && !bearerToken.isBlank()) {
             builder.header("Authorization", "Bearer " + bearerToken);
@@ -56,7 +72,7 @@ public class HttpClientUtil {
                 .timeout(Duration.ofSeconds(60))
                 .header("apikey", AppConfig.getSupabaseAnonKey())
                 .header("Content-Type", contentType)
-                .header("x-upsert", "true");
+                .header("x-upsert", "false");
 
         if (bearerToken != null && !bearerToken.isBlank()) {
             builder.header("Authorization", "Bearer " + bearerToken);
@@ -88,7 +104,8 @@ public class HttpClientUtil {
                 .uri(URI.create(fullUrl))
                 .timeout(Duration.ofSeconds(20))
                 .header("apikey", AppConfig.getSupabaseAnonKey())
-                .header("Accept", "application/json");
+                .header("Accept", "application/json")
+                .header("Prefer", "return=representation");
 
         if (bearerToken != null && !bearerToken.isBlank()) {
             builder.header("Authorization", "Bearer " + bearerToken);

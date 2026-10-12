@@ -64,7 +64,10 @@ public class AuthRepository {
         body.put("email", email);
 
         return HttpClientUtil.postAsync("/auth/v1/recover", JsonUtil.toJson(body), null)
-                .thenApply(response -> response.statusCode() < 400);
+                .thenApply(response -> {
+                    if (response.statusCode() >= 400) throw new RuntimeException(extractErrorMessage(response.body(), "Could not send a reset link. Please try again."));
+                    return true;
+                });
     }
 
     private User parseUserFromAuthJson(String json) {
@@ -78,6 +81,9 @@ public class AuthRepository {
             String id = userNode.path("id").asText(null);
             String email = userNode.path("email").asText(null);
 
+            if (id == null || id.isBlank() || accessToken == null || accessToken.isBlank()) {
+                throw new IllegalStateException("The server did not return a valid sign-in session.");
+            }
             User user = new User(id, email, accessToken, refreshToken);
             user.setExpiresIn(expiresIn);
             return user;
@@ -124,6 +130,7 @@ public class AuthRepository {
             if (node.has("error_description")) return node.get("error_description").asText();
             if (node.has("msg")) return node.get("msg").asText();
             if (node.has("message")) return node.get("message").asText();
+            if (node.has("error_code")) return node.get("error_code").asText();
         } catch (Exception ignored) {}
         return defaultMsg;
     }

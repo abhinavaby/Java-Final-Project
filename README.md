@@ -1,3 +1,5 @@
+For Windows/macOS installers and Render download hosting, see [DISTRIBUTION.md](DISTRIBUTION.md).
+
 # ConnectAI — AI-Powered Realtime Java Desktop Chat Application
 
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://jdk.java.net/21/)

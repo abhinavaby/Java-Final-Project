@@ -13,7 +13,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class AuthService {
     private static final AuthService instance = new AuthService();
-    private static final File SESSION_FILE = new File("local-session.json");
+    private static final File SESSION_FILE = com.connectai.config.AppPaths.dataDirectory().resolve("local-session.json").toFile();
 
     private final AuthRepository authRepository;
     private final ProfileRepository profileRepository;
@@ -43,7 +43,7 @@ public class AuthService {
                     // (i.e. email confirmation is disabled in Supabase settings)
                     if (user.getAccessToken() != null && !user.getAccessToken().isBlank()) {
                         saveSession(user);
-                        return loadCurrentProfile().thenApply(p -> user);
+                        return loadProfileAfterAuthentication().thenApply(p -> user);
                     }
                     // Email confirmation required — return user without loading profile yet
                     this.currentUser = null; // clear until confirmed
@@ -61,7 +61,7 @@ public class AuthService {
                 .thenCompose(user -> {
                     this.currentUser = user;
                     saveSession(user);
-                    return loadCurrentProfile().thenApply(p -> user);
+                    return loadProfileAfterAuthentication().thenApply(p -> user);
                 });
     }
 
@@ -87,11 +87,31 @@ public class AuthService {
                     .thenCompose(newUser -> {
                         this.currentUser = newUser;
                         saveSession(newUser);
-                        return loadCurrentProfile().thenApply(p -> newUser);
+                        return loadProfileAfterAuthentication().thenApply(p -> newUser);
                     });
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    private CompletableFuture<Profile> loadProfileAfterAuthentication() {
+        currentProfile = null;
+        profileLoadWarning = null;
+        return loadCurrentProfile().exceptionally(error -> {
+            // Authentication succeeded. A missing schema or RLS problem must not invalidate it.
+            String name = currentUser.getEmail() == null ? "User" : currentUser.getEmail().split("@")[0];
+            currentProfile = new Profile(currentUser.getId(), name.toLowerCase(), name, null);
+            profileLoadWarning = "Signed in, but your profile could not be loaded. Check the Supabase database setup and profile policies.";
+            return currentProfile;
+        });
+    }
+
+    private String profileLoadWarning;
+
+    public String consumeProfileLoadWarning() {
+        String warning = profileLoadWarning;
+        profileLoadWarning = null;
+        return warning;
     }
 
     public CompletableFuture<Profile> loadCurrentProfile() {
@@ -108,7 +128,7 @@ public class AuthService {
                     }
                     // Profile not found in DB: create fallback profile from user email
                     String fallbackName = currentUser.getEmail() != null ? currentUser.getEmail().split("@")[0] : "User";
-                    Profile p = new Profile(currentUser.getId(), fallbackName.toLowerCase(), fallbackName, null);
+                    Profile p = new Profile(currentUser.getId(), "user_" + currentUser.getId().replace("-", ""), fallbackName, null);
                     this.currentProfile = p;
 
                     // Upsert profile into Supabase
@@ -118,9 +138,11 @@ public class AuthService {
                             "display_name", p.getDisplayName(),
                             "about", "Hey there! I am using ConnectAI."
                     );
-                    HttpClientUtil.postAsync("/rest/v1/profiles", JsonUtil.toJson(map), currentUser.getAccessToken());
-
-                    return CompletableFuture.completedFuture(p);
+                    return HttpClientUtil.postAsync("/rest/v1/profiles", JsonUtil.toJson(map), currentUser.getAccessToken())
+                            .thenApply(response -> {
+                                if (response.statusCode() >= 400) throw new IllegalStateException("Profile creation failed");
+                                return p;
+                            });
                 });
     }
 
@@ -165,6 +187,7 @@ public class AuthService {
     private void saveSession(User user) {
         try {
             String json = JsonUtil.toJson(user);
+            Files.createDirectories(SESSION_FILE.toPath().getParent());
             Files.writeString(SESSION_FILE.toPath(), json);
         } catch (Exception e) {
             System.err.println("Failed to save session locally: " + e.getMessage());

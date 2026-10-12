@@ -22,8 +22,29 @@ public class MessageRepository {
                     if (response.statusCode() >= 400) {
                         throw new RuntimeException("Failed to fetch messages: " + response.body());
                     }
-                    return JsonUtil.fromJsonList(response.body(), Message.class);
+                    return parseMessages(response.body());
                 });
+    }
+
+    static List<Message> parseMessages(String json) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode rows = JsonUtil.getMapper().readTree(json);
+            if (!rows.isArray()) throw new IllegalStateException("The server returned an invalid message list.");
+            for (com.fasterxml.jackson.databind.JsonNode row : rows) {
+                // PostgREST embeds reverse relationships as arrays, even with an alias.
+                // The desktop model displays one attachment and one poll per message.
+                for (String field : List.of("attachment", "poll")) {
+                    com.fasterxml.jackson.databind.JsonNode embedded = row.get(field);
+                    if (embedded != null && embedded.isArray()) {
+                        ((com.fasterxml.jackson.databind.node.ObjectNode) row).set(field,
+                                embedded.isEmpty() ? com.fasterxml.jackson.databind.node.NullNode.instance : embedded.get(0));
+                    }
+                }
+            }
+            return JsonUtil.fromJsonList(rows.toString(), Message.class);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Could not read the message response.", e);
+        }
     }
 
     public CompletableFuture<Message> sendMessage(Message message, String accessToken) {
@@ -43,7 +64,8 @@ public class MessageRepository {
                     if (response.statusCode() >= 400) {
                         throw new RuntimeException("Failed to send message: " + response.body());
                     }
-                    List<Message> list = JsonUtil.fromJsonList(response.body(), Message.class);
+                    List<Message> list = parseMessages(response.body());
+                    if (list.isEmpty()) throw new IllegalStateException("The server returned no message. Check the message read policy.");
                     return list.get(0);
                 });
     }
@@ -59,7 +81,8 @@ public class MessageRepository {
                     if (response.statusCode() >= 400) {
                         throw new RuntimeException("Failed to edit message: " + response.body());
                     }
-                    List<Message> list = JsonUtil.fromJsonList(response.body(), Message.class);
+                    List<Message> list = parseMessages(response.body());
+                    if (list.isEmpty()) throw new IllegalStateException("The server returned no message. Check the message read policy.");
                     return list.get(0);
                 });
     }

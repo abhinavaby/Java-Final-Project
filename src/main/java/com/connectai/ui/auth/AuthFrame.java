@@ -52,8 +52,8 @@ public class AuthFrame extends JFrame {
     public AuthFrame() {
         setTitle(AppConfig.getAppName() + " — Authentication");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(new Dimension(960, 640));
-        setMinimumSize(new Dimension(860, 580));
+        setSize(new Dimension(960, 720));
+        setMinimumSize(new Dimension(900, 680));
         setLocationRelativeTo(null);
 
         JPanel mainPanel = new JPanel(new BorderLayout());
@@ -73,6 +73,9 @@ public class AuthFrame extends JFrame {
         mainPanel.add(cardsPanel, BorderLayout.CENTER);
 
         setContentPane(mainPanel);
+        getRootPane().setDefaultButton(loginButton);
+        loginPasswordField.getPasswordField().addActionListener(e -> performLogin());
+        regConfirmPasswordField.getPasswordField().addActionListener(e -> performRegistration());
     }
 
     private JPanel createBrandingPanel() {
@@ -90,7 +93,7 @@ public class AuthFrame extends JFrame {
         logoRow.setOpaque(false);
         logoRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel logoIcon = new JLabel("⚡");
+        JLabel logoIcon = new JLabel("C");
         logoIcon.setFont(new Font("Segoe UI Emoji", Font.BOLD, 26));
         logoIcon.setForeground(ThemeColors.PRIMARY_ACCENT);
 
@@ -101,7 +104,7 @@ public class AuthFrame extends JFrame {
         logoRow.add(logoIcon);
         logoRow.add(logoText);
 
-        JLabel tagline = new JLabel("AI-Powered Realtime Messenger");
+        JLabel tagline = new JLabel("Your team, in one place");
         tagline.setFont(ThemeFonts.BODY_MEDIUM);
         tagline.setForeground(ThemeColors.MUTED_TEXT);
         tagline.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -111,14 +114,15 @@ public class AuthFrame extends JFrame {
         panel.add(tagline);
         panel.add(Box.createVerticalStrut(36));
 
-        // 2. Feature Highlights (Clean bullet list with icons)
-        panel.add(createFeatureItem("💬", "Realtime Team Messaging", "Instant non-blocking communication across direct chats and channels."));
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(createFeatureItem("🤖", "Built-in AI Assistant", "Catch Me Up conversation summaries and tone rephrasing powered by OpenAI."));
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(createFeatureItem("🎙", "Voice Notes & Files", "Share high-fidelity audio recordings and documents with one click."));
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(createFeatureItem("📊", "Interactive Team Polls", "Gather instant team feedback with single & multiple choice voting."));
+        JLabel headline = new JLabel("<html>Good conversations.<br>Less noise.</html>");
+        headline.setFont(ThemeFonts.TITLE_LARGE.deriveFont(30f));
+        headline.setForeground(ThemeColors.PRIMARY_TEXT);
+        headline.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(headline);
+        panel.add(Box.createVerticalStrut(20));
+        panel.add(createFeatureItem("", "A place for your team", "Keep conversations, files and decisions together."));
+        panel.add(Box.createVerticalStrut(20));
+        panel.add(createFeatureItem("", "A little help when you need it", "Catch up on a conversation or find the right words with AI."));
 
         panel.add(Box.createVerticalGlue());
 
@@ -129,7 +133,7 @@ public class AuthFrame extends JFrame {
         badge.setAlignmentX(Component.LEFT_ALIGNMENT);
         badge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JLabel badgeText = new JLabel(AppConfig.isSupabaseConfigured() ? "🟢 Supabase Connected" : "⚙️ Setup Supabase Backend");
+        JLabel badgeText = new JLabel(AppConfig.isSupabaseConfigured() ? "Connection settings" : "Set up connection");
         badgeText.setFont(ThemeFonts.CAPTION);
         badgeText.setForeground(ThemeColors.PRIMARY_ACCENT);
         badge.add(badgeText);
@@ -255,18 +259,8 @@ public class AuthFrame extends JFrame {
         loginButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         loginButton.addActionListener(e -> performLogin());
 
-        // Secondary Action: Configure Supabase backend button
-        PremiumButton configBtn = new PremiumButton("⚙️ Supabase Settings", ThemeColors.MAIN_BG, ThemeColors.SECONDARY_TEXT);
-        configBtn.setFont(ThemeFonts.BODY_MEDIUM);
-        configBtn.setPreferredSize(new Dimension(332, 38));
-        configBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-        configBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        configBtn.addActionListener(e -> showSupabaseConfigDialog());
-
         card.add(loginButton);
-        card.add(Box.createVerticalStrut(8));
-        card.add(configBtn);
-        card.add(Box.createVerticalStrut(16));
+        card.add(Box.createVerticalStrut(20));
 
         // Switch to Sign Up
         JPanel switchBox = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 0));
@@ -285,6 +279,7 @@ public class AuthFrame extends JFrame {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 cardLayout.show(cardsPanel, "REGISTER");
+                getRootPane().setDefaultButton(registerButton);
             }
         });
 
@@ -371,6 +366,7 @@ public class AuthFrame extends JFrame {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 cardLayout.show(cardsPanel, "LOGIN");
+                getRootPane().setDefaultButton(loginButton);
             }
         });
 
@@ -401,6 +397,8 @@ public class AuthFrame extends JFrame {
     }
 
     private void performLogin() {
+        if (!loginButton.isEnabled()) return;
+        AppConfig.setMockMode(false);
         if (!AppConfig.isSupabaseConfigured()) {
             ToastManager.showToast(this, "Please configure Supabase URL & Anon Key", ToastManager.ToastType.WARNING);
             showSupabaseConfigDialog();
@@ -416,6 +414,7 @@ public class AuthFrame extends JFrame {
         }
 
         loginButton.setEnabled(false);
+        loginButton.setText("Signing in…");
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
@@ -426,6 +425,7 @@ public class AuthFrame extends JFrame {
             @Override
             protected void done() {
                 loginButton.setEnabled(true);
+                loginButton.setText("Log In");
                 try {
                     get();
                     ToastManager.showToast(AuthFrame.this, "Welcome back!", ToastManager.ToastType.SUCCESS);
@@ -444,6 +444,8 @@ public class AuthFrame extends JFrame {
     }
 
     private void performRegistration() {
+        if (!registerButton.isEnabled()) return;
+        AppConfig.setMockMode(false);
         if (!AppConfig.isSupabaseConfigured()) {
             ToastManager.showToast(this, "Please configure Supabase URL & Anon Key", ToastManager.ToastType.WARNING);
             showSupabaseConfigDialog();
@@ -484,12 +486,19 @@ public class AuthFrame extends JFrame {
                 registerButton.setEnabled(true);
                 try {
                     get();
+                    if (AuthService.getInstance().getCurrentUser() != null) {
+                        dispose();
+                        new MainChatFrame().setVisible(true);
+                        return;
+                    }
+                    loginEmailField.setText(email);
                     // Show confirmation email notice instead of going directly to chat
                     ToastManager.showToast(AuthFrame.this,
                             "Account created! Please check your email to confirm your account.",
                             ToastManager.ToastType.SUCCESS);
                     // Switch back to login screen so user can log in after confirmation
                     cardLayout.show(cardsPanel, "LOGIN");
+                getRootPane().setDefaultButton(loginButton);
                 } catch (Exception ex) {
                     String msg = extractErrorMessage(ex);
                     if (msg.toLowerCase().contains("already registered") || msg.toLowerCase().contains("user already exists")) {
@@ -512,6 +521,10 @@ public class AuthFrame extends JFrame {
         Throwable t = ex;
         String bestMsg = null;
         while (t != null) {
+            if (t instanceof java.net.UnknownHostException || t instanceof java.net.ConnectException)
+                return "Could not reach Supabase. Check the project URL and internet connection.";
+            if (t instanceof java.net.http.HttpTimeoutException)
+                return "The connection timed out. Please try again.";
             String msg = t.getMessage();
             if (msg != null && !msg.isBlank()) {
                 bestMsg = msg;
@@ -541,7 +554,7 @@ public class AuthFrame extends JFrame {
             return "Please check your inbox and confirm your email before logging in.";
         }
         if (lower.contains("invalid_credentials") || lower.contains("invalid login credentials")) {
-            return "Incorrect email or password.";
+            return "Email or password was not accepted. Check your email address, or use Forgot password to reset it.";
         }
         if (lower.contains("user already registered") || lower.contains("already registered")) {
             return "This email is already registered. Please log in instead.";
@@ -609,10 +622,34 @@ public class AuthFrame extends JFrame {
                 ToastManager.showToast(this, "Please enter valid Supabase URL and Anon Key", ToastManager.ToastType.WARNING);
                 return;
             }
-            AppConfig.updateSupabaseCredentials(u, k);
-            ToastManager.showToast(this, "Supabase credentials saved successfully!", ToastManager.ToastType.SUCCESS);
-            dialog.dispose();
-            repaint();
+            try {
+                AppConfig.validateSupabaseCredentials(u, k);
+            } catch (IllegalArgumentException ex) {
+                ToastManager.showToast(this, ex.getMessage(), ToastManager.ToastType.WARNING);
+                return;
+            }
+            saveBtn.setEnabled(false);
+            saveBtn.setText("Checking connection…");
+            new SwingWorker<Void, Void>() {
+                protected Void doInBackground() throws Exception {
+                    com.connectai.util.HttpClientUtil.checkSupabaseConnection(u, k).get();
+                    AppConfig.updateSupabaseCredentials(u, k);
+                    return null;
+                }
+                protected void done() {
+                    saveBtn.setEnabled(true);
+                    saveBtn.setText("Save & connect");
+                    try {
+                        get();
+                        AuthService.getInstance().logout();
+                        dialog.dispose();
+                        ToastManager.showToast(AuthFrame.this, "Connection verified. You can sign in now.", ToastManager.ToastType.SUCCESS);
+                    } catch (Exception ex) {
+                        ToastManager.showToast(dialog, extractErrorMessage(ex), ToastManager.ToastType.ERROR);
+                    }
+                }
+            }.execute();
+
         });
 
         panel.add(title);

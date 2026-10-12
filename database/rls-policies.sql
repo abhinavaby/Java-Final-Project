@@ -25,16 +25,28 @@ CREATE POLICY "Users can update their own profile"
     USING (auth.uid() = id);
 
 -- 2. Conversations Policies
+-- Avoid recursive RLS queries by checking membership through a narrowly scoped helper.
+CREATE OR REPLACE FUNCTION public.is_conversation_member(target_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+    SELECT EXISTS (SELECT 1 FROM public.conversation_members
+        WHERE conversation_id = target_id AND user_id = auth.uid());
+$$;
+CREATE OR REPLACE FUNCTION public.is_conversation_admin(target_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
+    SELECT EXISTS (SELECT 1 FROM public.conversation_members
+        WHERE conversation_id = target_id AND user_id = auth.uid() AND role IN ('OWNER', 'ADMIN'));
+$$;
+REVOKE ALL ON FUNCTION public.is_conversation_member(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_conversation_admin(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_conversation_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_conversation_admin(uuid) TO authenticated;
+
 CREATE POLICY "Users can view conversations they belong to or public channels"
     ON public.conversations FOR SELECT
     TO authenticated
     USING (
-        is_private = false OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversations.id
-            AND cm.user_id = auth.uid()
-        )
+        created_by = auth.uid() OR is_private = false OR
+        public.is_conversation_member(conversations.id)
     );
 
 CREATE POLICY "Authenticated users can create conversations"
@@ -46,12 +58,7 @@ CREATE POLICY "Owners and admins can update conversations"
     ON public.conversations FOR UPDATE
     TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversations.id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversations.id)
     );
 
 -- 3. Conversation Members Policies
@@ -59,11 +66,7 @@ CREATE POLICY "Members can view members of their conversations"
     ON public.conversation_members FOR SELECT
     TO authenticated
     USING (
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-        )
+        public.is_conversation_member(conversation_members.conversation_id)
     );
 
 CREATE POLICY "Users can insert themselves or admins can add members"
@@ -71,12 +74,7 @@ CREATE POLICY "Users can insert themselves or admins can add members"
     TO authenticated
     WITH CHECK (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 CREATE POLICY "Users can update their own membership state or admins can update roles"
@@ -84,12 +82,7 @@ CREATE POLICY "Users can update their own membership state or admins can update 
     TO authenticated
     USING (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 CREATE POLICY "Users can leave or admins can remove members"
@@ -97,12 +90,7 @@ CREATE POLICY "Users can leave or admins can remove members"
     TO authenticated
     USING (
         user_id = auth.uid() OR
-        EXISTS (
-            SELECT 1 FROM public.conversation_members cm
-            WHERE cm.conversation_id = conversation_members.conversation_id
-            AND cm.user_id = auth.uid()
-            AND cm.role IN ('OWNER', 'ADMIN')
-        )
+        public.is_conversation_admin(conversation_members.conversation_id)
     );
 
 -- 4. Messages Policies

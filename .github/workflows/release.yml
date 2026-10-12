@@ -1,0 +1,60 @@
+name: Build desktop installers
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            label: windows-x64
+            type: exe
+          - os: macos-15
+            label: mac-arm64
+            type: dmg
+          - os: macos-15-intel
+            label: mac-intel
+            type: dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and test
+        run: mvn --batch-mode clean package -DargLine=-Djava.awt.headless=true
+      - name: Package with included Java runtime
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+        run: python scripts/package-app.py --type ${{ matrix.type }} --label ${{ matrix.label }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConnectAI-${{ matrix.label }}
+          path: target/installers/${{ matrix.label }}/*
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - name: Publish release downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" || gh release create "$GITHUB_REF_NAME" --title "ConnectAI $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" installers/* --clobber

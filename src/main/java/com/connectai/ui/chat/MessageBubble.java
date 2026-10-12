@@ -149,7 +149,7 @@ public class MessageBubble extends JPanel {
         // Timestamp & checkmarks
         JLabel footerLabel = new JLabel(timeStr + " ✓✓");
         footerLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        footerLabel.setForeground(new Color(255, 255, 255, 180));
+        footerLabel.setForeground(ThemeColors.SECONDARY_TEXT);
         footerLabel.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
         card.add(Box.createVerticalStrut(4));
@@ -161,7 +161,54 @@ public class MessageBubble extends JPanel {
         setupContextMenu(card);
     }
 
+    @Override
+    public Dimension getMaximumSize() {
+        return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+    }
+
     private void addContent(JPanel container, boolean isOutgoingMsg) {
+        if (message.getAttachment() != null && message.getMessageType() != MessageType.AUDIO && message.getMessageType() != MessageType.VOICE) {
+            com.connectai.model.Attachment attachment = message.getAttachment();
+            javax.swing.JButton open = new javax.swing.JButton(attachment.getOriginalFilename());
+            open.setFont(ThemeFonts.BODY_MEDIUM);
+            open.setAlignmentX(Component.LEFT_ALIGNMENT);
+            open.setToolTipText("Open attachment");
+            open.addActionListener(event -> com.connectai.service.AttachmentService.getInstance()
+                    .getSignedDownloadUrl(attachment.getStoragePath()).thenAccept(url -> {
+                        try {
+                            java.awt.Desktop.getDesktop().browse(java.net.URI.create(url));
+                        } catch (Exception error) {
+                            javax.swing.SwingUtilities.invokeLater(() -> ToastManager.showToast(this,
+                                    "Could not open attachment: " + error.getMessage(), ToastManager.ToastType.ERROR));
+                        }
+                    }).exceptionally(error -> {
+                        javax.swing.SwingUtilities.invokeLater(() -> ToastManager.showToast(this,
+                                com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR));
+                        return null;
+                    }));
+            if (attachment.getMimeType() != null && attachment.getMimeType().startsWith("image/")) {
+                JLabel preview = new JLabel("Loading photo…");
+                preview.setAlignmentX(Component.LEFT_ALIGNMENT);
+                preview.setForeground(ThemeColors.SECONDARY_TEXT);
+                container.add(preview);
+                com.connectai.service.AttachmentService.getInstance().getSignedDownloadUrl(attachment.getStoragePath())
+                        .thenApplyAsync(url -> {
+                            try {
+                                java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(java.net.URI.create(url).toURL());
+                                if (img == null) throw new IllegalStateException("Unsupported image format");
+                                double scale = Math.min(1.0, Math.min(240.0 / img.getWidth(), 180.0 / img.getHeight()));
+                                return new javax.swing.ImageIcon(img.getScaledInstance((int)(img.getWidth()*scale),
+                                        (int)(img.getHeight()*scale), java.awt.Image.SCALE_SMOOTH));
+                            } catch (Exception error) { throw new java.util.concurrent.CompletionException(error); }
+                        }).whenComplete((icon, error) -> javax.swing.SwingUtilities.invokeLater(() -> {
+                            preview.setText(error == null ? "" : "Open file to view photo");
+                            if (icon != null) preview.setIcon(icon);
+                            revalidate();
+                            repaint();
+                        }));
+            }
+            container.add(open);
+        }
         if (message.getMessageType() == MessageType.POLL && message.getPoll() != null) {
             JPanel p = new PollCardComponent(message.getPoll());
             p.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -173,11 +220,13 @@ public class MessageBubble extends JPanel {
             container.add(a);
         } else {
             String raw = message.getContent() != null ? message.getContent() : "";
+            raw = raw.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
             String formatted = raw.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>")
                     .replaceAll("\\n", "<br/>");
 
-            String textColor = isOutgoingMsg ? "#FFFFFF" : "#0F172A";
-            JLabel label = new JLabel("<html><body style='width: 380px; color: " + textColor + "; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 13px; line-height: 1.4;'>" + formatted + "</body></html>");
+            String textColor = "#242B28";
+            int width = Math.min(280, Math.max(24, getFontMetrics(ThemeFonts.BODY_MEDIUM).stringWidth(raw) + 4));
+            JLabel label = new JLabel("<html><body style='width: " + width + "px; color: " + textColor + "; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 13px; line-height: 1.4;'>" + formatted + "</body></html>");
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
             container.add(label);
         }

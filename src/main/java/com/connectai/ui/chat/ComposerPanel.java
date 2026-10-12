@@ -242,6 +242,10 @@ public class ComposerPanel extends JPanel {
                     clearPreview();
                     if (onMessageSentCallback != null) onMessageSentCallback.run();
                 });
+            }).exceptionally(error -> {
+                SwingUtilities.invokeLater(() -> ToastManager.showToast(this,
+                        com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR));
+                return null;
             });
             return;
         }
@@ -253,6 +257,10 @@ public class ComposerPanel extends JPanel {
                 clearPreview();
                 if (onMessageSentCallback != null) onMessageSentCallback.run();
             });
+        }).exceptionally(error -> {
+            SwingUtilities.invokeLater(() -> ToastManager.showToast(this,
+                    com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR));
+            return null;
         });
     }
 
@@ -295,10 +303,15 @@ public class ComposerPanel extends JPanel {
             File selected = chooser.getSelectedFile();
             Frame top = (Frame) SwingUtilities.getWindowAncestor(this);
             new AttachmentPreviewDialog(top, selected, (f, caption) -> {
+                ToastManager.showToast(this, "Uploading " + f.getName() + "…", ToastManager.ToastType.INFO);
                 AttachmentService.getInstance().uploadAndSendFile(conversationId, f, caption, null, 0).thenRun(() -> {
                     SwingUtilities.invokeLater(() -> {
                         if (onMessageSentCallback != null) onMessageSentCallback.run();
                     });
+                }).exceptionally(error -> {
+                    SwingUtilities.invokeLater(() -> ToastManager.showToast(this,
+                            com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR));
+                    return null;
                 });
             }).setVisible(true);
         }

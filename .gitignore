@@ -19,3 +19,7 @@ local-session.json
 recordings/
 downloads/
 *.log
+
+# Python helper bytecode
+__pycache__/
+*.pyc

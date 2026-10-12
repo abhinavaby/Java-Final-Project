@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
 public class StorageRepository {
 
     public CompletableFuture<String> uploadFile(String storagePath, byte[] data, String contentType, String accessToken) {
-        String path = "/storage/v1/object/chat-attachments/" + storagePath;
+        String path = "/storage/v1/object/chat-attachments/" + encodePath(storagePath);
         return HttpClientUtil.postBinaryAsync(path, data, contentType, accessToken)
                 .thenApply(response -> {
                     if (response.statusCode() >= 400) {
@@ -21,7 +21,7 @@ public class StorageRepository {
     }
 
     public CompletableFuture<String> getSignedUrl(String storagePath, int expiresInSeconds, String accessToken) {
-        String path = "/storage/v1/object/sign/chat-attachments/" + storagePath;
+        String path = "/storage/v1/object/sign/chat-attachments/" + encodePath(storagePath);
         Map<String, Object> body = Map.of("expiresIn", expiresInSeconds);
 
         return HttpClientUtil.postAsync(path, JsonUtil.toJson(body), accessToken)
@@ -33,10 +33,17 @@ public class StorageRepository {
                         JsonNode node = JsonUtil.getMapper().readTree(response.body());
                         String signedUrlPath = node.path("signedURL").asText(null);
                         if (signedUrlPath != null) {
-                            return AppConfig.getSupabaseUrl() + signedUrlPath;
+                            return signedUrlPath.startsWith("http") ? signedUrlPath
+                                    : AppConfig.getSupabaseUrl().replaceAll("/+$", "")
+                                    + (signedUrlPath.startsWith("/storage/v1/") ? "" : "/storage/v1") + signedUrlPath;
                         }
                     } catch (Exception ignored) {}
-                    return AppConfig.getSupabaseUrl() + "/storage/v1/object/authenticated/chat-attachments/" + storagePath;
+                    return AppConfig.getSupabaseUrl() + "/storage/v1/object/authenticated/chat-attachments/" + encodePath(storagePath);
                 });
+    }
+    static String encodePath(String path) {
+        return java.util.Arrays.stream(path.split("/"))
+                .map(part -> java.net.URLEncoder.encode(part, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20"))
+                .collect(java.util.stream.Collectors.joining("/"));
     }
 }

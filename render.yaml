@@ -1,15 +1,13 @@
 services:
   - type: web
-    name: connectai-desktop
-    env: docker
-    dockerfilePath: ./Dockerfile
-    plan: free
-    envVars:
-      - key: PORT
-        value: 6080
-      - key: RESOLUTION
-        value: 1600x900x24
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_ANON_KEY
-        sync: false
+    name: connectai-downloads
+    runtime: static
+    buildCommand: echo "Publishing ConnectAI download page"
+    staticPublishPath: ./website
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

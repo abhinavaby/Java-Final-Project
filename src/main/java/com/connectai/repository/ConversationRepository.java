@@ -84,7 +84,8 @@ public class ConversationRepository {
                                     throw new RuntimeException("Failed to create direct conversation: " + createRes.body());
                                 }
                                 List<Conversation> createdList = JsonUtil.fromJsonList(createRes.body(), Conversation.class);
-                                Conversation conv = createdList.get(0);
+                                if (createdList.isEmpty()) throw new IllegalStateException("The database returned no conversation. Check the conversation read policies.");
+                    Conversation conv = createdList.get(0);
 
                                 // Add both users as members
                                 Map<String, Object> m1 = Map.of("conversation_id", conv.getId(), "user_id", currentUserId, "role", Role.OWNER.name());
@@ -92,7 +93,10 @@ public class ConversationRepository {
                                 List<Map<String, Object>> membersBody = List.of(m1, m2);
 
                                 return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(membersBody), accessToken)
-                                        .thenApply(mRes -> conv);
+                                        .thenApply(mRes -> {
+                                            if (mRes.statusCode() >= 400) throw new RuntimeException("Could not add conversation members: " + mRes.body());
+                                            return conv;
+                                        });
                             });
                 });
     }
@@ -113,6 +117,7 @@ public class ConversationRepository {
                         throw new RuntimeException("Failed to create group: " + response.body());
                     }
                     List<Conversation> createdList = JsonUtil.fromJsonList(response.body(), Conversation.class);
+                    if (createdList.isEmpty()) throw new IllegalStateException("The database returned no conversation. Check the conversation read policies.");
                     Conversation conv = createdList.get(0);
 
                     // Add creator as OWNER
@@ -122,7 +127,20 @@ public class ConversationRepository {
                             "role", Role.OWNER.name()
                     );
                     return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(memberBody), accessToken)
-                            .thenApply(r -> conv);
+                            .thenApply(r -> {
+                                if (r.statusCode() >= 400) throw new RuntimeException("Could not join group: " + r.body());
+                                return conv;
+                            });
+                });
+    }
+
+    public CompletableFuture<Void> deleteGroup(String id, String accessToken) {
+        return HttpClientUtil.deleteAsync("/rest/v1/conversations?id=eq." + id + "&select=id", accessToken)
+                .thenApply(response -> {
+                    if (response.statusCode() >= 400) throw new IllegalStateException("Could not delete group: " + response.body());
+                    if (response.body().isBlank() || response.body().trim().equals("[]"))
+                        throw new IllegalStateException("Group was not deleted. Only its creator can delete it; check the delete policy.");
+                    return null;
                 });
     }
 
@@ -146,7 +164,10 @@ public class ConversationRepository {
                     );
 
                     return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(memberBody), accessToken)
-                            .thenApply(r -> conv);
+                            .thenApply(r -> {
+                                if (r.statusCode() >= 400) throw new RuntimeException("Could not join group: " + r.body());
+                                return conv;
+                            });
                 });
     }
 

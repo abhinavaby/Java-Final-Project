@@ -107,7 +107,7 @@ public class CreateGroupDialog extends JDialog {
                     if (onSuccessCallback != null)
                         onSuccessCallback.run();
                 } catch (Exception ex) {
-                    ToastManager.showToast(CreateGroupDialog.this, "Failed to create group",
+                    ToastManager.showToast(CreateGroupDialog.this, com.connectai.util.ErrorMessages.from(ex),
                             ToastManager.ToastType.ERROR);
                 }
             }

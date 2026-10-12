@@ -98,7 +98,7 @@ public class ConversationListPanel extends JPanel {
         JPanel logoBox = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         logoBox.setOpaque(false);
 
-        JLabel logoIcon = new JLabel("⚡");
+        JLabel logoIcon = new JLabel("C");
         logoIcon.setFont(new Font("Segoe UI Emoji", Font.BOLD, 18));
         logoIcon.setForeground(ThemeColors.PRIMARY_ACCENT);
 
