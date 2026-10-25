@@ -51,6 +51,9 @@ public class AuthFrame extends JFrame {
 
     public AuthFrame() {
         setTitle(AppConfig.getAppName() + " — Authentication");
+        try (var iconStream = getClass().getResourceAsStream("/icons/connectai.png")) {
+            if (iconStream != null) setIconImage(javax.imageio.ImageIO.read(iconStream));
+        } catch (Exception ignored) {}
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(new Dimension(960, 720));
         setMinimumSize(new Dimension(900, 680));
@@ -81,7 +84,7 @@ public class AuthFrame extends JFrame {
     private JPanel createBrandingPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ThemeColors.ELEVATED_SURFACE);
         panel.setPreferredSize(new Dimension(380, 640));
         panel.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 0, 1, ThemeColors.DIVIDER),
@@ -184,7 +187,7 @@ public class AuthFrame extends JFrame {
         container.setOpaque(false);
 
         // Clean elevated white card
-        JPanel card = new RoundedPanel(16, Color.WHITE, ThemeColors.CARD_BORDER);
+        JPanel card = new RoundedPanel(16, ThemeColors.ELEVATED_SURFACE, ThemeColors.CARD_BORDER);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setPreferredSize(new Dimension(400, 480));
         card.setMaximumSize(new Dimension(420, 500));
@@ -296,7 +299,7 @@ public class AuthFrame extends JFrame {
         JPanel container = new JPanel(new GridBagLayout());
         container.setOpaque(false);
 
-        JPanel card = new RoundedPanel(16, Color.WHITE, ThemeColors.CARD_BORDER);
+        JPanel card = new RoundedPanel(16, ThemeColors.ELEVATED_SURFACE, ThemeColors.CARD_BORDER);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setPreferredSize(new Dimension(420, 560));
         card.setMaximumSize(new Dimension(440, 580));
@@ -573,7 +576,7 @@ public class AuthFrame extends JFrame {
 
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBackground(Color.WHITE);
+        panel.setBackground(ThemeColors.ELEVATED_SURFACE);
         panel.setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
 
         JLabel title = new JLabel("Supabase Backend Settings");

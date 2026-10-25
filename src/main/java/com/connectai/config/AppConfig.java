@@ -174,6 +174,17 @@ public class AppConfig {
 
     public static String getAppVersion() {
         load();
-        return properties.getProperty("app.version", "2.1.0");
+        return properties.getProperty("app.version", "2.2.0");
+    }
+
+    public static boolean isDarkMode() {
+        load();
+        return Boolean.parseBoolean(properties.getProperty("app.theme.dark", "false"));
+    }
+
+    public static synchronized void setDarkMode(boolean dark) {
+        load();
+        properties.setProperty("app.theme.dark", Boolean.toString(dark));
+        saveProperties();
     }
 }

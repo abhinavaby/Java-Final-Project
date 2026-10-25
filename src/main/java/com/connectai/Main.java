@@ -13,9 +13,11 @@ import javax.swing.UIManager;
  */
 public class Main {
     public static void main(String[] args) {
-        // Initialize FlatLaf Light Look and Feel matching clean modern aesthetic
+        AppConfig.load();
+        ThemeColors.applyDarkMode(AppConfig.isDarkMode());
         try {
-            com.formdev.flatlaf.FlatLightLaf.setup();
+            if (AppConfig.isDarkMode()) com.formdev.flatlaf.FlatDarkLaf.setup();
+            else com.formdev.flatlaf.FlatLightLaf.setup();
             UIManager.put("Component.accentColor", ThemeColors.PRIMARY_ACCENT);
             UIManager.put("Panel.background", ThemeColors.MAIN_BG);
             UIManager.put("TextComponent.arc", 12);
@@ -25,9 +27,6 @@ public class Main {
         } catch (Exception e) {
             System.err.println("Failed to initialize FlatLaf theme: " + e.getMessage());
         }
-
-        // Load configuration
-        AppConfig.load();
 
         // Launch Splash Screen on Swing Event Dispatch Thread (EDT)
         SwingUtilities.invokeLater(() -> {

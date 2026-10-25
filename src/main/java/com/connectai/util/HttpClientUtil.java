@@ -62,7 +62,7 @@ public class HttpClientUtil {
                 .header("apikey", AppConfig.getSupabaseAnonKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .header("Prefer", (pathOrUrl.startsWith("/rest/v1/conversations?") || pathOrUrl.startsWith("/rest/v1/messages?") || pathOrUrl.startsWith("/rest/v1/attachments?") || pathOrUrl.contains("?select="))
+                .header("Prefer", (pathOrUrl.startsWith("/rest/v1/conversations?") || pathOrUrl.startsWith("/rest/v1/messages?") || pathOrUrl.startsWith("/rest/v1/attachments?") || pathOrUrl.startsWith("/rest/v1/rpc/") || pathOrUrl.contains("?select="))
                         ? "return=representation" : "return=minimal");
 
         if (bearerToken != null && !bearerToken.isBlank()) {

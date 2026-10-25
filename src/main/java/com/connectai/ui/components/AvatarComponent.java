@@ -22,6 +22,7 @@ public class AvatarComponent extends JComponent {
     private Color customFgColor;
     private int ringWidth = 0;
     private Color ringColor = Color.WHITE;
+    private String loadedAvatarPath;
 
     public AvatarComponent(int size, String displayName, boolean showOnlineStatus) {
         this.size = size;
@@ -46,6 +47,19 @@ public class AvatarComponent extends JComponent {
     public void setImage(BufferedImage image) {
         this.image = image;
         repaint();
+    }
+
+    public void loadAvatar(String storagePath) {
+        if (storagePath == null || storagePath.isBlank() || storagePath.equals(loadedAvatarPath)) return;
+        loadedAvatarPath = storagePath;
+        var auth = com.connectai.service.AuthService.getInstance();
+        new com.connectai.repository.StorageRepository().downloadAvatar(storagePath, auth.getAccessToken())
+                .thenAccept(bytes -> {
+                    try {
+                        BufferedImage loaded = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes));
+                        if (loaded != null) javax.swing.SwingUtilities.invokeLater(() -> setImage(loaded));
+                    } catch (Exception ignored) {}
+                });
     }
 
     public void setOnline(boolean online) {

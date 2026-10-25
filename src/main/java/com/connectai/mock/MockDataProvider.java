@@ -54,6 +54,12 @@ public class MockDataProvider {
         return currentProfile;
     }
 
+    public Profile updateCurrentProfile(String displayName, String about) {
+        currentProfile.setDisplayName(displayName);
+        currentProfile.setAbout(about);
+        return currentProfile;
+    }
+
     public List<ConversationMember> getUserMemberships() {
         List<ConversationMember> members = new ArrayList<>();
         for (Conversation conv : conversations.values()) {
@@ -76,8 +82,17 @@ public class MockDataProvider {
         String normalized = query == null ? "" : query.trim().toLowerCase();
         return profiles.values().stream()
                 .filter(profile -> !profile.getId().equals(currentUser.getId()))
-                .filter(profile -> profile.getUsername() != null && profile.getUsername().toLowerCase().contains(normalized))
+                .filter(profile -> (profile.getUsername() != null && profile.getUsername().toLowerCase().contains(normalized))
+                        || (profile.getDisplayName() != null && profile.getDisplayName().toLowerCase().contains(normalized)))
                 .toList();
+    }
+
+    public synchronized void leaveGroup(String conversationId) {
+        Conversation conversation = conversations.get(conversationId);
+        if (conversation == null || conversation.getMembers() == null) return;
+        conversation.getMembers().removeIf(member -> currentUser.getId().equals(member.getUserId()));
+        if (!conversation.getMembers().isEmpty() && conversation.getMembers().stream().noneMatch(m -> m.getRole() == Role.OWNER))
+            conversation.getMembers().get(0).setRole(Role.OWNER);
     }
 
     public synchronized Conversation startDirectConversation(String partnerUserId) {

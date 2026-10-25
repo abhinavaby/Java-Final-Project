@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Package on the target OS; only public Supabase settings enter the app."""
-import argparse, os, pathlib, platform, shutil, subprocess, re
+import argparse, os, pathlib, platform, shutil, subprocess, re, tempfile
 parser = argparse.ArgumentParser()
 parser.add_argument('--type', choices=['dmg', 'exe', 'app-image'], required=True)
 release_version = os.environ.get('GITHUB_REF_NAME', '').removeprefix('v')
-parser.add_argument('--version', default=release_version if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', release_version) else '2.1.0')
+parser.add_argument('--version', default=release_version if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', release_version) else '2.2.0')
 parser.add_argument('--label', default='mac-arm64')
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
@@ -12,7 +12,7 @@ os.chdir(root)
 stage = root / 'target' / 'package-input'
 shutil.rmtree(stage, ignore_errors=True)
 stage.mkdir(parents=True)
-shutil.copy2(root / 'target/connectai-2.1.0.jar', stage / 'connectai.jar')
+shutil.copy2(root / f'target/connectai-{args.version}.jar', stage / 'connectai.jar')
 url = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
 key = os.environ.get('SUPABASE_PUBLISHABLE_KEY', os.environ.get('SUPABASE_ANON_KEY', '')).strip()
 if bool(url) != bool(key): raise SystemExit('Provide both the Supabase URL and public key.')
@@ -35,14 +35,38 @@ if url:
     subprocess.run(['jar', 'uf', str(stage / 'connectai.jar'), '-C', str(resource), 'application.properties'], check=True)
 out = root / 'target' / 'installers' / args.label
 out.mkdir(parents=True, exist_ok=True)
+package_temp = None
+package_dest = out
+keep_temp_output = False
+if platform.system() == 'Darwin':
+    # The project folder can carry Finder metadata that causes jpackage's ad-hoc
+    # signature check to fail. Build in a clean temporary folder, then move the
+    # finished artifact into the project output directory.
+    package_temp = pathlib.Path(tempfile.mkdtemp(prefix='connectai-package-'))
+    package_dest = package_temp
+    keep_temp_output = os.environ.get('GITHUB_ACTIONS', '').lower() != 'true'
 cmd = ['jpackage', '--type', args.type, '--name', 'ConnectAI', '--app-version', args.version,
        '--input', str(stage), '--main-jar', 'connectai.jar', '--main-class', 'com.connectai.Main',
-       '--dest', str(out), '--vendor', 'ConnectAI', '--description', 'Team conversations, files and decisions in one place',
+       '--dest', str(package_dest), '--vendor', 'ConnectAI', '--description', 'Team conversations, files and decisions in one place',
        '--java-options', '-Dfile.encoding=UTF-8']
-if args.type == 'exe': cmd += ['--win-per-user-install', '--win-menu', '--win-shortcut', '--win-dir-chooser']
-if platform.system() == 'Darwin': cmd += ['--mac-package-identifier', 'com.connectai.desktop']
+if args.type == 'exe': cmd += ['--icon', str(root / 'assets/connectai.ico'), '--win-per-user-install', '--win-menu', '--win-shortcut', '--win-dir-chooser']
+if platform.system() == 'Darwin': cmd += ['--mac-package-identifier', 'com.connectai.desktop', '--icon', str(root / 'assets/connectai.icns')]
+if platform.system() == 'Linux': cmd += ['--icon', str(root / 'assets/connectai.png')]
 subprocess.run(cmd, check=True)
-for file in out.iterdir():
+if package_temp and not keep_temp_output:
+    for artifact in package_temp.iterdir():
+        target = out / artifact.name
+        if target.is_dir(): shutil.rmtree(target)
+        elif target.exists(): target.unlink()
+        shutil.move(str(artifact), str(target))
+    package_temp.rmdir()
+    app_image = out / 'ConnectAI.app'
+    if app_image.exists():
+        subprocess.run(['xattr', '-d', 'com.apple.FinderInfo', str(app_image)], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app_image)], check=True)
+final_out = package_dest if keep_temp_output else out
+for file in final_out.iterdir():
     if file.suffix in ('.dmg', '.exe'):
-        file.rename(out / f'ConnectAI-{args.label}{file.suffix}')
-print(f'Package output: {out}')
+        file.rename(final_out / f'ConnectAI-{args.label}{file.suffix}')
+print(f'Package output: {final_out}')

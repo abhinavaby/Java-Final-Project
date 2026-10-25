@@ -10,7 +10,15 @@ import java.util.concurrent.CompletableFuture;
 public class StorageRepository {
 
     public CompletableFuture<String> uploadFile(String storagePath, byte[] data, String contentType, String accessToken) {
-        String path = "/storage/v1/object/chat-attachments/" + encodePath(storagePath);
+        return uploadToBucket("chat-attachments", storagePath, data, contentType, accessToken);
+    }
+
+    public CompletableFuture<String> uploadAvatar(String storagePath, byte[] data, String contentType, String accessToken) {
+        return uploadToBucket("avatars", storagePath, data, contentType, accessToken);
+    }
+
+    private CompletableFuture<String> uploadToBucket(String bucket, String storagePath, byte[] data, String contentType, String accessToken) {
+        String path = "/storage/v1/object/" + bucket + "/" + encodePath(storagePath);
         return HttpClientUtil.postBinaryAsync(path, data, contentType, accessToken)
                 .thenApply(response -> {
                     if (response.statusCode() >= 400) {
@@ -18,6 +26,14 @@ public class StorageRepository {
                     }
                     return storagePath;
                 });
+    }
+
+    public CompletableFuture<byte[]> downloadAvatar(String storagePath, String accessToken) {
+        String path = "/storage/v1/object/public/avatars/" + encodePath(storagePath);
+        return HttpClientUtil.getBytesAsync(path, accessToken).thenApply(response -> {
+            if (response.statusCode() >= 400) throw new RuntimeException("Could not load profile picture.");
+            return response.body();
+        });
     }
 
     public CompletableFuture<String> getSignedUrl(String storagePath, int expiresInSeconds, String accessToken) {

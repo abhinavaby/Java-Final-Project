@@ -95,14 +95,15 @@ public class ConversationRepository {
                                 if (createdList.isEmpty()) throw new IllegalStateException("The database returned no conversation. Check the conversation read policies.");
                     Conversation conv = createdList.get(0);
 
-                                // Add both users as members
+                                // Join as owner first so row-level policy permits adding the partner.
                                 Map<String, Object> m1 = Map.of("conversation_id", conv.getId(), "user_id", currentUserId, "role", Role.OWNER.name());
                                 Map<String, Object> m2 = Map.of("conversation_id", conv.getId(), "user_id", partnerUserId, "role", Role.MEMBER.name());
-                                List<Map<String, Object>> membersBody = List.of(m1, m2);
-
-                                return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(membersBody), accessToken)
-                                        .thenApply(mRes -> {
-                                            if (mRes.statusCode() >= 400) throw new RuntimeException("Could not add conversation members: " + mRes.body());
+                                return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(m1), accessToken)
+                                        .thenCompose(ownerRes -> {
+                                            if (ownerRes.statusCode() >= 400) throw new RuntimeException("Could not create direct chat membership: " + ownerRes.body());
+                                            return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(m2), accessToken);
+                                        }).thenApply(partnerRes -> {
+                                            if (partnerRes.statusCode() >= 400) throw new RuntimeException("Could not add the other person to the direct chat: " + partnerRes.body());
                                             return conv;
                                         });
                             });
@@ -152,31 +153,17 @@ public class ConversationRepository {
                 });
     }
 
-    public CompletableFuture<Conversation> joinGroupByInviteCode(String inviteCode, String userId, String accessToken) {
-        String path = "/rest/v1/conversations?invite_code=eq." + inviteCode.trim().toUpperCase() + "&select=*";
-        return HttpClientUtil.getAsync(path, accessToken)
-                .thenCompose(response -> {
-                    if (response.statusCode() >= 400) {
-                        throw new RuntimeException("Invalid invite code");
-                    }
-                    List<Conversation> list = JsonUtil.fromJsonList(response.body(), Conversation.class);
-                    if (list.isEmpty()) {
-                        throw new RuntimeException("No group found with invite code: " + inviteCode);
-                    }
-                    Conversation conv = list.get(0);
-
-                    Map<String, Object> memberBody = Map.of(
-                            "conversation_id", conv.getId(),
-                            "user_id", userId,
-                            "role", Role.MEMBER.name()
-                    );
-
-                    return HttpClientUtil.postAsync("/rest/v1/conversation_members", JsonUtil.toJson(memberBody), accessToken)
-                            .thenApply(r -> {
-                                if (r.statusCode() >= 400) throw new RuntimeException("Could not join group: " + r.body());
-                                return conv;
-                            });
-                });
+    public CompletableFuture<Conversation> joinGroupByInviteCode(String inviteCode, String accessToken) {
+        String path = "/rest/v1/rpc/join_group_by_invite_code";
+        Map<String, Object> body = Map.of("p_invite_code", inviteCode == null ? "" : inviteCode.trim());
+        return HttpClientUtil.postAsync(path, JsonUtil.toJson(body), accessToken).thenApply(response -> {
+            if (response.statusCode() >= 400) {
+                throw new RuntimeException("Could not join group: " + response.body());
+            }
+            List<Conversation> groups = JsonUtil.fromJsonList(response.body(), Conversation.class);
+            if (groups.isEmpty()) throw new RuntimeException("No group was returned for that invite code.");
+            return groups.get(0);
+        });
     }
 
     public CompletableFuture<List<ConversationMember>> getConversationMembers(String conversationId, String accessToken) {
@@ -205,6 +192,14 @@ public class ConversationRepository {
         return HttpClientUtil.deleteAsync(path, accessToken)
                 .thenApply(r -> {
                     if (r.statusCode() >= 400) throw new RuntimeException("Could not remove group member: " + r.body());
+                    return null;
+                });
+    }
+
+    public CompletableFuture<Void> leaveGroup(String conversationId, String accessToken) {
+        return HttpClientUtil.postAsync("/rest/v1/rpc/leave_group", JsonUtil.toJson(Map.of("target_conversation", conversationId)), accessToken)
+                .thenApply(r -> {
+                    if (r.statusCode() >= 400) throw new RuntimeException("Could not leave group: " + r.body());
                     return null;
                 });
     }

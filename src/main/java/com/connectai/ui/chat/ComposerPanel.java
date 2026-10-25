@@ -77,7 +77,7 @@ public class ComposerPanel extends JPanel {
     private void renderNormalComposer() {
         removeAll();
 
-        activeComposerCard = new RoundedPanel(24, Color.WHITE, ThemeColors.CARD_BORDER);
+        activeComposerCard = new RoundedPanel(24, ThemeColors.ELEVATED_SURFACE, ThemeColors.CARD_BORDER);
         activeComposerCard.setLayout(new BorderLayout(8, 0));
         activeComposerCard.setBorder(BorderFactory.createEmptyBorder(6, 14, 6, 8));
 
@@ -265,6 +265,7 @@ public class ComposerPanel extends JPanel {
             SwingUtilities.invokeLater(() -> {
                 inputArea.setText("");
                 clearPreview();
+                inputArea.requestFocusInWindow();
                 if (onMessageSentCallback != null) onMessageSentCallback.run();
             });
         }).exceptionally(error -> {

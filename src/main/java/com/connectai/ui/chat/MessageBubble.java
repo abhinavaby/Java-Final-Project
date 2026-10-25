@@ -232,7 +232,8 @@ public class MessageBubble extends JPanel {
             String formatted = raw.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>")
                     .replaceAll("\\n", "<br/>");
 
-            String textColor = "#242B28";
+            Color text = isOutgoing ? ThemeColors.OUTGOING_TEXT : ThemeColors.INCOMING_TEXT;
+            String textColor = String.format("#%02X%02X%02X", text.getRed(), text.getGreen(), text.getBlue());
             int width = Math.min(280, Math.max(24, getFontMetrics(ThemeFonts.BODY_MEDIUM).stringWidth(raw) + 4));
             JLabel label = new JLabel("<html><body style='width: " + width + "px; color: " + textColor + "; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; font-size: 13px; line-height: 1.4;'>" + formatted + "</body></html>");
             label.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -246,7 +247,7 @@ public class MessageBubble extends JPanel {
         bar.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         for (MessageReaction rx : message.getReactions()) {
-            JPanel pill = new RoundedPanel(12, Color.WHITE, ThemeColors.CARD_BORDER);
+            JPanel pill = new RoundedPanel(12, ThemeColors.ELEVATED_SURFACE, ThemeColors.CARD_BORDER);
             pill.setLayout(new FlowLayout(FlowLayout.CENTER, 4, 2));
             JLabel el = new JLabel(rx.getEmoji());
             el.setFont(ThemeFonts.CAPTION);
@@ -314,16 +315,16 @@ public class MessageBubble extends JPanel {
     }
 
     private String formatTime(String timeIso) {
-        if (timeIso == null || timeIso.length() < 16) return "10:00 AM";
+        if (timeIso == null || timeIso.isBlank()) return "";
         try {
-            int hour = Integer.parseInt(timeIso.substring(11, 13));
-            int minute = Integer.parseInt(timeIso.substring(14, 16));
-            String ampm = hour >= 12 ? "PM" : "AM";
-            int h12 = hour % 12;
-            if (h12 == 0) h12 = 12;
-            return String.format("%d:%02d %s", h12, minute, ampm);
-        } catch (Exception e) {
-            return "10:00 AM";
+            java.time.Instant instant = java.time.Instant.parse(timeIso);
+            return java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+                    .withZone(java.time.ZoneId.systemDefault()).format(instant);
+        } catch (java.time.format.DateTimeParseException ignored) {
+            try {
+                return java.time.format.DateTimeFormatter.ofPattern("h:mm a")
+                        .format(java.time.OffsetDateTime.parse(timeIso).atZoneSameInstant(java.time.ZoneId.systemDefault()));
+            } catch (java.time.format.DateTimeParseException ignoredAgain) { return ""; }
         }
     }
 }

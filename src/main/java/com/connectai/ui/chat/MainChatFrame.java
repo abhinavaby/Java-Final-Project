@@ -43,6 +43,9 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
 
     public MainChatFrame() {
         setTitle(AppConfig.getAppName() + " — AI-Powered Desktop Messenger");
+        try (var iconStream = getClass().getResourceAsStream("/icons/connectai.png")) {
+            if (iconStream != null) setIconImage(javax.imageio.ImageIO.read(iconStream));
+        } catch (Exception ignored) {}
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(ThemeDimensions.WINDOW_DEFAULT_SIZE);
         setMinimumSize(ThemeDimensions.WINDOW_MIN_SIZE);
@@ -111,6 +114,16 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
         centerCardLayout.show(centerCardContainer, "EMPTY");
     }
 
+    @Override
+    public void dispose() {
+        SupabaseRealtimeClient.getInstance().removeListener(this);
+        super.dispose();
+    }
+
+    public void refreshProfileDisplay() {
+        leftSidebarPanel.updateCurrentUserDisplay();
+    }
+
     private void openConversation(Conversation conv) {
         this.activeConversation = conv;
         if (conv == null) {
@@ -143,17 +156,20 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                     if (activeConversation == null || !requestedConversationId.equals(activeConversation.getId())) return;
                     messageListContainer.removeAll();
 
-                    // Centered "Today" Date Badge pill
-                    messageListContainer.add(Box.createVerticalStrut(10));
-                    messageListContainer.add(createDateSeparatorPill("Today"));
-                    messageListContainer.add(Box.createVerticalStrut(14));
-
                     String currentUserId = AuthService.getInstance().getCurrentUser() != null
                             ? AuthService.getInstance().getCurrentUser().getId() : "";
+                    java.time.LocalDate previousDate = null;
 
                     // Messages come ordered desc from DB, reverse to render chronologically
                     for (int i = msgs.size() - 1; i >= 0; i--) {
                         Message m = msgs.get(i);
+                        java.time.LocalDate messageDate = localMessageDate(m.getCreatedAt());
+                        if (messageDate != null && !messageDate.equals(previousDate)) {
+                            messageListContainer.add(Box.createVerticalStrut(10));
+                            messageListContainer.add(createDateSeparatorPill(formatDateLabel(messageDate)));
+                            messageListContainer.add(Box.createVerticalStrut(14));
+                            previousDate = messageDate;
+                        }
                         boolean isOutgoing = currentUserId.equals(m.getSenderId());
                         MessageBubble bubble = new MessageBubble(
                                 m, isOutgoing,
@@ -184,6 +200,22 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                 }
             }
         }.execute();
+    }
+
+    private java.time.LocalDate localMessageDate(String timestamp) {
+        if (timestamp == null || timestamp.isBlank()) return null;
+        try { return java.time.Instant.parse(timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate(); }
+        catch (java.time.format.DateTimeParseException ignored) {
+            try { return java.time.OffsetDateTime.parse(timestamp).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDate(); }
+            catch (java.time.format.DateTimeParseException ignoredAgain) { return null; }
+        }
+    }
+
+    private String formatDateLabel(java.time.LocalDate date) {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (date.equals(today)) return "Today";
+        if (date.equals(today.minusDays(1))) return "Yesterday";
+        return date.format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"));
     }
 
     private boolean hasCurrentUserReaction(Message message, String emoji) {

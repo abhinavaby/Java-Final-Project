@@ -15,9 +15,15 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 public class SettingsDialog extends JDialog {
+    private final Runnable onThemeChanged;
 
     public SettingsDialog(Frame owner) {
+        this(owner, null);
+    }
+
+    public SettingsDialog(Frame owner, Runnable onThemeChanged) {
         super(owner, "ConnectAI Settings", true);
+        this.onThemeChanged = onThemeChanged;
         setSize(new Dimension(460, 480));
         setLocationRelativeTo(owner);
 
@@ -59,6 +65,32 @@ public class SettingsDialog extends JDialog {
         content.add(soundCheck);
         content.add(javax.swing.Box.createVerticalStrut(8));
         content.add(aiCheck);
+
+        PremiumButton profileButton = new PremiumButton("Edit profile and picture", ThemeColors.ELEVATED_SURFACE, ThemeColors.PRIMARY_TEXT);
+        profileButton.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+        profileButton.addActionListener(e -> new ProfileDialog(owner, () -> {
+            if (owner instanceof com.connectai.ui.chat.MainChatFrame frame) frame.refreshProfileDisplay();
+        }).setVisible(true));
+        content.add(javax.swing.Box.createVerticalStrut(16));
+        content.add(profileButton);
+
+        JCheckBox darkMode = new JCheckBox("Dark appearance", AppConfig.isDarkMode());
+        darkMode.setFont(ThemeFonts.BODY_MEDIUM);
+        darkMode.setForeground(ThemeColors.PRIMARY_TEXT);
+        darkMode.setOpaque(false);
+        darkMode.addActionListener(e -> {
+            boolean selected = darkMode.isSelected();
+            AppConfig.setDarkMode(selected);
+            ThemeColors.applyDarkMode(selected);
+            if (selected) com.formdev.flatlaf.FlatDarkLaf.setup();
+            else com.formdev.flatlaf.FlatLightLaf.setup();
+            javax.swing.UIManager.put("Component.accentColor", ThemeColors.PRIMARY_ACCENT);
+            javax.swing.UIManager.put("Panel.background", ThemeColors.MAIN_BG);
+            dispose();
+            if (onThemeChanged != null) javax.swing.SwingUtilities.invokeLater(onThemeChanged);
+        });
+        content.add(javax.swing.Box.createVerticalStrut(12));
+        content.add(darkMode);
 
         // Footer
         JPanel footer = new JPanel(new BorderLayout());

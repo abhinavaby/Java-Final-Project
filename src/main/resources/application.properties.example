@@ -2,4 +2,4 @@
 supabase.url=https://YOUR_SUPABASE_PROJECT_REF.supabase.co
 supabase.anon.key=YOUR_SUPABASE_ANON_KEY
 app.name=ConnectAI
-app.version=2.1.0
+app.version=2.2.0

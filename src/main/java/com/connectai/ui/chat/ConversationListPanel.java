@@ -220,6 +220,13 @@ public class ConversationListPanel extends JPanel {
         String initialName = getEffectiveCurrentUserName();
         userAvatar = new AvatarComponent(36, initialName, true);
         userAvatar.setCustomColors(ThemeColors.AVATAR_DARK_BG, ThemeColors.AVATAR_DARK_FG);
+        com.connectai.model.Profile currentProfile = AuthService.getInstance().getCurrentProfile();
+        if (currentProfile != null) userAvatar.loadAvatar(currentProfile.getAvatarPath());
+        userAvatar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        userAvatar.setToolTipText("Edit profile");
+        userAvatar.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) { openProfileEditor(); }
+        });
 
         JPanel info = new JPanel();
         info.setLayout(new BoxLayout(info, BoxLayout.Y_AXIS));
@@ -235,6 +242,10 @@ public class ConversationListPanel extends JPanel {
 
         info.add(userNameLabel);
         info.add(role);
+        info.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        info.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) { openProfileEditor(); }
+        });
 
         userBox.add(userAvatar);
         userBox.add(info);
@@ -243,7 +254,10 @@ public class ConversationListPanel extends JPanel {
         settingsBtn.setPreferredSize(new Dimension(32, 32));
         settingsBtn.addActionListener(e -> {
             Frame f = (Frame) SwingUtilities.getWindowAncestor(this);
-            new com.connectai.ui.components.SettingsDialog(f).setVisible(true);
+            new com.connectai.ui.components.SettingsDialog(f, () -> {
+                if (f != null) f.dispose();
+                new MainChatFrame().setVisible(true);
+            }).setVisible(true);
         });
 
         footer.add(userBox, BorderLayout.WEST);
@@ -258,8 +272,15 @@ public class ConversationListPanel extends JPanel {
         }
         if (userAvatar != null) {
             userAvatar.setDisplayName(name);
+            com.connectai.model.Profile p = AuthService.getInstance().getCurrentProfile();
+            if (p != null) userAvatar.loadAvatar(p.getAvatarPath());
             userAvatar.repaint();
         }
+    }
+
+    private void openProfileEditor() {
+        Frame frame = (Frame) SwingUtilities.getWindowAncestor(this);
+        new com.connectai.ui.components.ProfileDialog(frame, this::updateCurrentUserDisplay).setVisible(true);
     }
 
     private String getEffectiveCurrentUserName() {

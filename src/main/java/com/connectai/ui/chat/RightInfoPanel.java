@@ -42,6 +42,7 @@ public class RightInfoPanel extends JPanel {
     private Runnable onCloseCallback;
     private Runnable onDeletedCallback;
     private javax.swing.JButton deleteGroupButton;
+    private javax.swing.JButton leaveGroupButton;
     private java.util.List<ConversationMember> loadedMembers = java.util.List.of();
 
     public RightInfoPanel(Runnable onCloseCallback, Runnable onDeletedCallback) {
@@ -173,6 +174,13 @@ public class RightInfoPanel extends JPanel {
         deleteGroupButton.setVisible(false);
         deleteGroupButton.addActionListener(e -> deleteCurrentGroup());
         body.add(deleteGroupButton);
+        leaveGroupButton = new javax.swing.JButton("Leave group");
+        leaveGroupButton.setForeground(ThemeColors.ERROR);
+        leaveGroupButton.setAlignmentX(CENTER_ALIGNMENT);
+        leaveGroupButton.setVisible(false);
+        leaveGroupButton.addActionListener(e -> leaveCurrentGroup());
+        body.add(Box.createVerticalStrut(8));
+        body.add(leaveGroupButton);
 
         JScrollPane scroll = new JScrollPane(body);
         scroll.setBorder(null);
@@ -186,7 +194,7 @@ public class RightInfoPanel extends JPanel {
     }
 
     private JPanel createActionButton(String icon, String label) {
-        JPanel btn = new RoundedPanel(14, Color.WHITE, ThemeColors.CARD_BORDER);
+        JPanel btn = new RoundedPanel(14, ThemeColors.ELEVATED_SURFACE, ThemeColors.CARD_BORDER);
         btn.setLayout(new FlowLayout(FlowLayout.CENTER, 6, 4));
         btn.setPreferredSize(new Dimension(78, 30));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -328,6 +336,7 @@ public class RightInfoPanel extends JPanel {
     public void setConversation(Conversation conv) {
         this.conversation = conv;
         if (conv == null) return;
+        leaveGroupButton.setVisible(conv.getType() == com.connectai.model.ConversationType.GROUP);
 
         deleteGroupButton.setVisible(conv.getType() == com.connectai.model.ConversationType.GROUP
                 && com.connectai.service.AuthService.getInstance().getCurrentUser() != null
@@ -351,6 +360,9 @@ public class RightInfoPanel extends JPanel {
                     SwingUtilities.invokeLater(() -> {
                         if (members != null && !members.isEmpty()) {
                             loadedMembers = java.util.List.copyOf(members);
+                            leaveGroupButton.setText(currentUserRole() == Role.OWNER ? "Leave group (transfer owner)" : "Leave group");
+                            leaveGroupButton.setToolTipText(currentUserRole() == Role.OWNER
+                                    ? "Ownership moves to another member when you leave" : "Remove yourself from this group");
                             membersListContainer.removeAll();
                             memberCountBadge.setText(members.size() + (members.size() == 1 ? " member" : " members"));
                             for (ConversationMember cm : members) {
@@ -370,6 +382,23 @@ public class RightInfoPanel extends JPanel {
                     SwingUtilities.invokeLater(this::loadDefaultMembers);
                     return null;
                 });
+    }
+
+    private void leaveCurrentGroup() {
+        if (conversation == null || conversation.getType() != com.connectai.model.ConversationType.GROUP) return;
+        if (javax.swing.JOptionPane.showConfirmDialog(this,
+                "Leave “" + conversation.getDisplayTitle() + "”? You will need a new invite to rejoin.",
+                "Leave group", javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE)
+                != javax.swing.JOptionPane.OK_OPTION) return;
+        Conversation target = conversation;
+        com.connectai.service.ChatService.getInstance().leaveGroup(target.getId()).whenComplete((ignored, error) ->
+                SwingUtilities.invokeLater(() -> {
+                    if (error != null) ToastManager.showToast(this, com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR);
+                    else {
+                        ToastManager.showToast(this, "You left the group", ToastManager.ToastType.SUCCESS);
+                        if (onDeletedCallback != null) onDeletedCallback.run();
+                    }
+                }));
     }
     private void deleteCurrentGroup() {
         if (conversation == null) return;

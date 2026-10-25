@@ -32,10 +32,14 @@ public class NewDirectChatDialog extends JDialog {
     private final DefaultListModel<Profile> resultsModel = new DefaultListModel<>();
     private final JList<Profile> results = new JList<>(resultsModel);
     private final JLabel status = new JLabel("Enter at least 2 characters to search.");
+    private final javax.swing.Timer searchTimer;
+    private long searchGeneration;
 
     public NewDirectChatDialog(Frame owner, Consumer<Conversation> onConversationCreated) {
         super(owner, "New direct conversation", true);
         this.onConversationCreated = onConversationCreated;
+        searchTimer = new javax.swing.Timer(300, e -> search());
+        searchTimer.setRepeats(false);
         setSize(420, 480);
         setLocationRelativeTo(owner);
 
@@ -43,7 +47,7 @@ public class NewDirectChatDialog extends JDialog {
         panel.setBackground(ThemeColors.MAIN_BG);
         panel.setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
 
-        JLabel heading = new JLabel("Find a person by username");
+        JLabel heading = new JLabel("Find a person by name or username");
         heading.setFont(ThemeFonts.TITLE_SMALL);
         heading.setForeground(ThemeColors.PRIMARY_TEXT);
         JPanel top = new JPanel(new BorderLayout(0, 10));
@@ -78,6 +82,12 @@ public class NewDirectChatDialog extends JDialog {
         panel.add(bottom, BorderLayout.SOUTH);
 
         searchField.addActionListener(e -> search());
+        searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void changed() { searchTimer.restart(); }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { changed(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { changed(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { changed(); }
+        });
         results.addMouseListener(new MouseAdapter() {
             @Override public void mouseClicked(MouseEvent e) { if (e.getClickCount() == 2) startChat(); }
         });
@@ -86,16 +96,16 @@ public class NewDirectChatDialog extends JDialog {
 
     private void search() {
         String query = searchField.getText().trim();
+        long generation = ++searchGeneration;
         resultsModel.clear();
         if (query.length() < 2) {
             status.setText("Enter at least 2 characters to search.");
             return;
         }
-        status.setText("Searching…");
-        searchField.setEnabled(false);
+        status.setText("Searching names and usernames…");
         ChatService.getInstance().searchProfilesByUsername(query).whenComplete((profiles, error) ->
                 SwingUtilities.invokeLater(() -> {
-                    searchField.setEnabled(true);
+                    if (generation != searchGeneration || !isDisplayable()) return;
                     if (error != null) {
                         status.setText(com.connectai.util.ErrorMessages.from(error));
                         return;

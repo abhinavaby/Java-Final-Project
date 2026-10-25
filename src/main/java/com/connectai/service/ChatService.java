@@ -19,6 +19,7 @@ public class ChatService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final ProfileRepository profileRepository;
+    private final com.connectai.repository.StorageRepository storageRepository = new com.connectai.repository.StorageRepository();
 
     private ChatService() {
         this.conversationRepository = new ConversationRepository();
@@ -59,7 +60,41 @@ public class ChatService {
         }
         String token = AuthService.getInstance().getAccessToken();
         String userId = AuthService.getInstance().getCurrentUser().getId();
-        return profileRepository.searchProfilesByUsername(usernameQuery, userId, token);
+        return profileRepository.searchProfiles(usernameQuery, userId, token);
+    }
+
+    public CompletableFuture<com.connectai.model.Profile> updateCurrentProfile(String displayName, String about, String avatarPath) {
+        var signedIn = AuthService.getInstance().getCurrentProfile();
+        if (signedIn == null) return CompletableFuture.failedFuture(new IllegalStateException("No signed-in profile."));
+        if (com.connectai.config.AppConfig.isMockMode()) {
+            var updated = com.connectai.mock.MockDataProvider.getInstance().updateCurrentProfile(displayName.trim(), about.trim());
+            if (avatarPath != null) updated.setAvatarPath(avatarPath);
+            return CompletableFuture.completedFuture(updated);
+        }
+        var candidate = new com.connectai.model.Profile(signedIn.getId(), signedIn.getUsername(), displayName.trim(),
+                avatarPath == null ? signedIn.getAvatarPath() : avatarPath);
+        candidate.setAbout(about.trim());
+        return profileRepository.updateProfile(candidate, AuthService.getInstance().getAccessToken()).thenApply(updated -> {
+            signedIn.setDisplayName(updated.getDisplayName());
+            signedIn.setAbout(updated.getAbout());
+            signedIn.setAvatarPath(updated.getAvatarPath());
+            return signedIn;
+        });
+    }
+
+    public CompletableFuture<String> uploadProfilePicture(java.io.File imageFile) {
+        if (com.connectai.config.AppConfig.isMockMode()) return CompletableFuture.completedFuture(null);
+        try {
+            String userId = AuthService.getInstance().getCurrentUser().getId();
+            String extension = imageFile.getName().contains(".")
+                    ? imageFile.getName().substring(imageFile.getName().lastIndexOf('.') + 1).toLowerCase() : "png";
+            if (!java.util.Set.of("png", "jpg", "jpeg", "webp").contains(extension))
+                return CompletableFuture.failedFuture(new IllegalArgumentException("Choose a PNG, JPG, or WEBP image."));
+            String mime = java.util.Objects.requireNonNullElse(java.nio.file.Files.probeContentType(imageFile.toPath()), "image/png");
+            String path = userId + "/" + UUID.randomUUID() + "." + extension;
+            return storageRepository.uploadAvatar(path, java.nio.file.Files.readAllBytes(imageFile.toPath()), mime,
+                    AuthService.getInstance().getAccessToken());
+        } catch (Exception e) { return CompletableFuture.failedFuture(e); }
     }
 
     public CompletableFuture<Conversation> createGroup(String name, String description, boolean isPrivate) {
@@ -83,8 +118,7 @@ public class ChatService {
             return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().joinGroupByInviteCode(inviteCode));
         }
         String token = AuthService.getInstance().getAccessToken();
-        String userId = AuthService.getInstance().getCurrentUser().getId();
-        return conversationRepository.joinGroupByInviteCode(inviteCode, userId, token);
+        return conversationRepository.joinGroupByInviteCode(inviteCode, token);
     }
 
     public CompletableFuture<List<Message>> loadMessages(String conversationId, int limit, int offset) {
@@ -168,5 +202,13 @@ public class ChatService {
         }
         String token = AuthService.getInstance().getAccessToken();
         return conversationRepository.removeMember(conversationId, memberUserId, token);
+    }
+
+    public CompletableFuture<Void> leaveGroup(String conversationId) {
+        if (com.connectai.config.AppConfig.isMockMode()) {
+            com.connectai.mock.MockDataProvider.getInstance().leaveGroup(conversationId);
+            return CompletableFuture.completedFuture(null);
+        }
+        return conversationRepository.leaveGroup(conversationId, AuthService.getInstance().getAccessToken());
     }
 }

@@ -7,7 +7,7 @@ For Windows/macOS installers and Render download hosting, see [DISTRIBUTION.md](
 [![Supabase](https://img.shields.io/badge/Backend-Supabase-green.svg)](https://supabase.com)
 [![OpenAI](https://img.shields.io/badge/AI-OpenAI%20API-purple.svg)](https://openai.com)
 
-**ConnectAI 2.1.0** is a cross-platform Java Swing desktop chat messenger featuring real-time messaging, Supabase authentication, database synchronization, storage attachment sharing, voice note recording/playback, live polling, and AI features powered by Supabase Edge Functions and OpenAI.
+**ConnectAI 2.2.0** is a cross-platform Java Swing desktop chat messenger featuring real-time messaging, Supabase authentication, database synchronization, storage attachment sharing, voice note recording/playback, live polling, and AI features powered by Supabase Edge Functions and OpenAI.
 
 ---
 
@@ -189,7 +189,7 @@ classDiagram
    - `database/storage-policies.sql` (Configures `chat-attachments` storage bucket & policies)
    - `database/sample-data.sql` (Optional seed script)
 
-   Or run `database/connectai-v2-setup.sql` as a single-file setup for a new project.
+   Or run `database/connectai-v2-setup.sql` as a single-file setup for a new project. Existing v2.1 projects should run `database/v2.2.0-upgrade.sql` to enable ownership transfer on group exit and profile-picture storage.
 
 ---
 
@@ -238,7 +238,7 @@ export SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 #### Or Run with Java:
 ```bash
-java -jar target/connectai-2.1.0.jar
+java -jar target/connectai-2.2.0.jar
 ```
 
 #### Compile and run tests:
