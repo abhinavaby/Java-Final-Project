@@ -37,6 +37,13 @@ public class AudioService {
 
     public CompletableFuture<Message> sendVoiceNote(String conversationId, byte[] wavBytes, int durationSeconds) {
         try {
+            if (conversationId == null || conversationId.isBlank()) {
+                return CompletableFuture.failedFuture(new IllegalArgumentException("Open a conversation before sending a voice note."));
+            }
+            if (wavBytes == null || wavBytes.length <= 44
+                    || wavBytes[0] != 'R' || wavBytes[1] != 'I' || wavBytes[2] != 'F' || wavBytes[3] != 'F') {
+                return CompletableFuture.failedFuture(new IllegalArgumentException("The recording is empty or invalid. Record your voice again."));
+            }
             File tempFile = File.createTempFile("voice_note_", ".wav");
             tempFile.deleteOnExit();
             Files.write(tempFile.toPath(), wavBytes);

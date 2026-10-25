@@ -122,8 +122,12 @@ public class ConversationListPanel extends JPanel {
             JMenuItem groupChat = new JMenuItem("Create group");
             groupChat.addActionListener(event -> new CreateGroupDialog(frame, this::refreshConversations)
                     .setVisible(true));
+            JMenuItem joinGroup = new JMenuItem("Join group by invite code");
+            joinGroup.addActionListener(event -> new JoinGroupDialog(frame, this::refreshConversations)
+                    .setVisible(true));
             menu.add(directChat);
             menu.add(groupChat);
+            menu.add(joinGroup);
             menu.show(newChatBtn, 0, newChatBtn.getHeight());
         });
 

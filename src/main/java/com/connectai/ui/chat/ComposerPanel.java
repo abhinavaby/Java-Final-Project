@@ -144,6 +144,19 @@ public class ComposerPanel extends JPanel {
 
         leftTools.add(attachBtn);
 
+        IconButton pollBtn = new IconButton("📊", "Create Poll");
+        pollBtn.setIconColor(ThemeColors.PRIMARY_ACCENT);
+        pollBtn.addActionListener(e -> {
+            if (conversationId == null) {
+                ToastManager.showToast(this, "Open a conversation before creating a poll",
+                        ToastManager.ToastType.WARNING);
+                return;
+            }
+            Frame frame = (Frame) SwingUtilities.getWindowAncestor(this);
+            new CreatePollDialog(frame, conversationId, onMessageSentCallback).setVisible(true);
+        });
+        leftTools.add(pollBtn);
+
         // Right tools: ✨ AI Rephrase, 🎙 Microphone, ✈ Send Button
         JPanel rightTools = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 2));
         rightTools.setOpaque(false);

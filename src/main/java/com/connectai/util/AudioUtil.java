@@ -10,12 +10,14 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineEvent;
+import javax.sound.sampled.Mixer;
 import javax.sound.sampled.TargetDataLine;
 
 public class AudioUtil {
     private TargetDataLine targetDataLine;
     private ByteArrayOutputStream recordStream;
-    private boolean isRecording = false;
+    private volatile boolean isRecording = false;
+    private AudioFormat recordingFormat;
     private Thread recordThread;
     private Clip currentClip;
     private long recordStartTime;
@@ -27,32 +29,64 @@ public class AudioUtil {
     }
 
     public synchronized boolean startRecording() throws Exception {
-        AudioFormat format = getStandardAudioFormat();
-        DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
+        if (isRecording) return true;
 
-        if (!AudioSystem.isLineSupported(info)) {
-            throw new IllegalStateException("Microphone line not supported on this device.");
-        }
-
-        targetDataLine = (TargetDataLine) AudioSystem.getLine(info);
-        targetDataLine.open(format);
+        targetDataLine = openCaptureLine();
+        recordingFormat = targetDataLine.getFormat();
         targetDataLine.start();
 
         recordStream = new ByteArrayOutputStream();
         isRecording = true;
         recordStartTime = System.currentTimeMillis();
+        TargetDataLine captureLine = targetDataLine;
+        ByteArrayOutputStream captureStream = recordStream;
 
         recordThread = new Thread(() -> {
             byte[] buffer = new byte[2048];
             while (isRecording) {
-                int read = targetDataLine.read(buffer, 0, buffer.length);
-                if (read > 0) {
-                    recordStream.write(buffer, 0, read);
+                try {
+                    int read = captureLine.read(buffer, 0, buffer.length);
+                    if (read > 0) captureStream.write(buffer, 0, read);
+                } catch (RuntimeException ex) {
+                    if (isRecording) System.err.println("Microphone capture stopped: " + ex.getMessage());
+                    break;
                 }
             }
-        });
+        }, "connectai-voice-recorder");
+        recordThread.setDaemon(true);
         recordThread.start();
         return true;
+    }
+
+    private TargetDataLine openCaptureLine() throws Exception {
+        AudioFormat[] formats = {
+                getStandardAudioFormat(),
+                new AudioFormat(44100.0f, 16, 1, true, false),
+                new AudioFormat(48000.0f, 16, 1, true, false),
+                new AudioFormat(44100.0f, 16, 2, true, false),
+                new AudioFormat(48000.0f, 16, 2, true, false)
+        };
+        Exception lastError = null;
+
+        for (AudioFormat format : formats) {
+            DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
+            for (Mixer.Info mixerInfo : AudioSystem.getMixerInfo()) {
+                Mixer mixer = AudioSystem.getMixer(mixerInfo);
+                if (!mixer.isLineSupported(info)) continue;
+                try {
+                    TargetDataLine line = (TargetDataLine) mixer.getLine(info);
+                    line.open(format);
+                    return line;
+                } catch (Exception ex) {
+                    lastError = ex;
+                }
+            }
+        }
+
+        if (lastError != null) {
+            throw new IllegalStateException("No supported microphone format is available. Check microphone permission and try again.", lastError);
+        }
+        throw new IllegalStateException("No supported microphone format is available. Check microphone permission and try again.");
     }
 
     public synchronized byte[] stopRecording() {
@@ -73,19 +107,27 @@ public class AudioUtil {
         }
 
         byte[] rawAudioBytes = recordStream.toByteArray();
-        return convertRawToWav(rawAudioBytes);
+        return convertRawToWav(rawAudioBytes, recordingFormat);
     }
 
     public byte[] convertRawToWav(byte[] rawAudioBytes) {
+        return convertRawToWav(rawAudioBytes, getStandardAudioFormat());
+    }
+
+    private byte[] convertRawToWav(byte[] rawAudioBytes, AudioFormat format) {
+        if (rawAudioBytes == null || rawAudioBytes.length == 0) return new byte[0];
         try {
-            AudioFormat format = getStandardAudioFormat();
-            ByteArrayInputStream bais = new ByteArrayInputStream(rawAudioBytes);
-            AudioInputStream ais = new AudioInputStream(bais, format, rawAudioBytes.length / format.getFrameSize());
+            int frameSize = format.getFrameSize();
+            int validLength = rawAudioBytes.length - (rawAudioBytes.length % frameSize);
+            if (validLength == 0) return new byte[0];
+            ByteArrayInputStream bais = new ByteArrayInputStream(rawAudioBytes, 0, validLength);
+            AudioInputStream ais = new AudioInputStream(bais, format, validLength / frameSize);
             ByteArrayOutputStream wavBaos = new ByteArrayOutputStream();
-            AudioSystem.write(ais, AudioFileFormat.Type.WAVE, wavBaos);
+            int written = AudioSystem.write(ais, AudioFileFormat.Type.WAVE, wavBaos);
+            if (written <= 44) throw new IllegalStateException("The microphone did not capture audio data.");
             return wavBaos.toByteArray();
         } catch (Exception e) {
-            return rawAudioBytes;
+            throw new IllegalStateException("Could not encode the voice recording as WAV audio.", e);
         }
     }
 

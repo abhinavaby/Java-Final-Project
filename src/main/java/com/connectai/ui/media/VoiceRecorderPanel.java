@@ -84,10 +84,15 @@ public class VoiceRecorderPanel extends JPanel {
 
     private void stopAndSend() {
         if (timer != null) timer.stop();
-        recordedWavBytes = AudioService.getInstance().stopVoiceRecording();
-        durationSeconds = (int) AudioService.getInstance().getRecordedDurationSeconds();
-        if (onSendCallback != null) {
-            onSendCallback.accept(recordedWavBytes, durationSeconds);
+        try {
+            recordedWavBytes = AudioService.getInstance().stopVoiceRecording();
+            durationSeconds = (int) AudioService.getInstance().getRecordedDurationSeconds();
+            if (onSendCallback != null) onSendCallback.accept(recordedWavBytes, durationSeconds);
+        } catch (Exception ex) {
+            com.connectai.ui.components.ToastManager.showToast(this,
+                    "Could not prepare voice note: " + com.connectai.util.ErrorMessages.from(ex),
+                    com.connectai.ui.components.ToastManager.ToastType.ERROR);
+            if (onCancelCallback != null) onCancelCallback.run();
         }
     }
 
