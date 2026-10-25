@@ -28,6 +28,13 @@ public class MockDataProvider {
         this.currentProfile.setLastSeen(Instant.now().toString());
 
         profiles.put(currentUserId, currentProfile);
+        Profile sara = new Profile("mock-user-sara", "sara.chen", "Sara Chen", null);
+        sara.setOnline(true);
+        Profile alex = new Profile("mock-user-alex", "alex.park", "Alex Park", null);
+        Profile maya = new Profile("mock-user-maya", "maya.patel", "Maya Patel", null);
+        profiles.put(sara.getId(), sara);
+        profiles.put(alex.getId(), alex);
+        profiles.put(maya.getId(), maya);
 
         // 2. Initialize the three public channels accessible to everyone
         initGeneralLounge();
@@ -65,6 +72,35 @@ public class MockDataProvider {
         return conversations.get(id);
     }
 
+    public List<Profile> searchProfiles(String query) {
+        String normalized = query == null ? "" : query.trim().toLowerCase();
+        return profiles.values().stream()
+                .filter(profile -> !profile.getId().equals(currentUser.getId()))
+                .filter(profile -> profile.getUsername() != null && profile.getUsername().toLowerCase().contains(normalized))
+                .toList();
+    }
+
+    public synchronized Conversation startDirectConversation(String partnerUserId) {
+        Profile partner = profiles.get(partnerUserId);
+        if (partner == null) throw new IllegalArgumentException("User not found.");
+        for (Conversation existing : conversations.values()) {
+            if (existing.getType() == ConversationType.DIRECT && existing.getDirectPartnerProfile() != null
+                    && partnerUserId.equals(existing.getDirectPartnerProfile().getId())) return existing;
+        }
+        Conversation direct = new Conversation();
+        direct.setId("mock-direct-" + UUID.randomUUID().toString().substring(0, 8));
+        direct.setType(ConversationType.DIRECT);
+        direct.setDirectPartnerProfile(partner);
+        direct.setCreatedBy(currentUser.getId());
+        direct.setCreatedAt(Instant.now().toString());
+        direct.setMembers(List.of(
+                new ConversationMember(direct.getId(), currentUser.getId(), Role.MEMBER, currentProfile),
+                new ConversationMember(direct.getId(), partner.getId(), Role.MEMBER, partner)));
+        conversations.put(direct.getId(), direct);
+        messagesByConversation.put(direct.getId(), new ArrayList<>());
+        return direct;
+    }
+
     public List<Message> getMessages(String conversationId) {
         return messagesByConversation.getOrDefault(conversationId, new ArrayList<>());
     }
@@ -100,6 +136,32 @@ public class MockDataProvider {
         return msg;
     }
 
+    public synchronized Message editMessage(String messageId, String content) {
+        for (List<Message> conversationMessages : messagesByConversation.values()) {
+            for (Message message : conversationMessages) {
+                if (messageId.equals(message.getId()) && currentUser.getId().equals(message.getSenderId())) {
+                    message.setContent(content);
+                    message.setEditedAt(Instant.now().toString());
+                    return message;
+                }
+            }
+        }
+        throw new IllegalStateException("Message could not be edited.");
+    }
+
+    public synchronized void deleteMessage(String messageId) {
+        for (List<Message> conversationMessages : messagesByConversation.values()) {
+            for (Message message : conversationMessages) {
+                if (messageId.equals(message.getId()) && currentUser.getId().equals(message.getSenderId())) {
+                    message.setDeletedAt(Instant.now().toString());
+                    message.setContent("This message was deleted.");
+                    return;
+                }
+            }
+        }
+        throw new IllegalStateException("Message could not be deleted.");
+    }
+
     public synchronized Poll votePoll(String pollId, String optionId, boolean allowsMultiple) {
         Poll poll = polls.get(pollId);
         if (poll == null) return null;
@@ -109,8 +171,11 @@ public class MockDataProvider {
         for (PollOption opt : poll.getOptions()) {
             if (opt.getId().equals(optionId)) {
                 if (opt.getUserVotes() != null && opt.getUserVotes().contains(userId)) {
-                    opt.getUserVotes().remove(userId);
-                    opt.setVoteCount(Math.max(0, opt.getVoteCount() - 1));
+                    // A vote remains selected until the user explicitly changes it.
+                    if (allowsMultiple) {
+                        opt.getUserVotes().remove(userId);
+                        opt.setVoteCount(Math.max(0, opt.getVoteCount() - 1));
+                    }
                 } else {
                     if (opt.getUserVotes() == null) opt.setUserVotes(new ArrayList<>());
                     opt.getUserVotes().add(userId);
@@ -125,11 +190,33 @@ public class MockDataProvider {
         }
 
         int total = 0;
+        int voters = 0;
+        Set<String> uniqueVoters = new HashSet<>();
         for (PollOption opt : poll.getOptions()) {
             total += opt.getVoteCount();
+            if (opt.getUserVotes() != null) uniqueVoters.addAll(opt.getUserVotes());
+            opt.setHasVoted(opt.getUserVotes() != null && opt.getUserVotes().contains(userId));
         }
         poll.setTotalVotes(total);
+        voters = uniqueVoters.size();
+        poll.setTotalVoters(voters);
+        poll.setUserVoted(poll.getOptions().stream().anyMatch(PollOption::isHasVoted));
+        for (PollOption opt : poll.getOptions()) opt.setPercentage(total == 0 ? 0 : opt.getVoteCount() * 100.0 / total);
         return poll;
+    }
+
+    public Poll getPoll(String pollId) { return polls.get(pollId); }
+
+    public synchronized void toggleReaction(String messageId, String emoji) {
+        for (List<Message> conversationMessages : messagesByConversation.values()) {
+            for (Message message : conversationMessages) {
+                if (!messageId.equals(message.getId())) continue;
+                List<MessageReaction> reactions = message.getReactions();
+                boolean exists = reactions.removeIf(r -> currentUser.getId().equals(r.getUserId()) && emoji.equals(r.getEmoji()));
+                if (!exists) reactions.add(new MessageReaction(messageId, currentUser.getId(), emoji));
+                return;
+            }
+        }
     }
 
     public synchronized Message createPoll(String conversationId, String question, List<String> optionTexts, boolean allowsMultiple, boolean isAnonymous) {

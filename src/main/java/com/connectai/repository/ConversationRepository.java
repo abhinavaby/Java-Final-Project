@@ -15,7 +15,8 @@ import java.util.concurrent.CompletableFuture;
 public class ConversationRepository {
 
     public CompletableFuture<List<ConversationMember>> getUserMemberships(String userId, String accessToken) {
-        String path = "/rest/v1/conversation_members?user_id=eq." + userId + "&select=*,conversation:conversations(*)";
+        String path = "/rest/v1/conversation_members?user_id=eq." + userId
+                + "&select=*,conversation:conversations(*,members:conversation_members(*,profile:profiles(*)))";
         return HttpClientUtil.getAsync(path, accessToken)
                 .thenCompose(response -> {
                     if (response.statusCode() >= 400) {
@@ -23,6 +24,13 @@ public class ConversationRepository {
                     }
                     List<ConversationMember> list = JsonUtil.fromJsonList(response.body(), ConversationMember.class);
                     if (list != null && !list.isEmpty()) {
+                        for (ConversationMember membership : list) {
+                            Conversation conv = membership.getConversation();
+                            if (conv == null || conv.getType() != ConversationType.DIRECT || conv.getMembers() == null) continue;
+                            conv.getMembers().stream().filter(member -> !userId.equals(member.getUserId()))
+                                    .map(ConversationMember::getProfile).filter(java.util.Objects::nonNull)
+                                    .findFirst().ifPresent(conv::setDirectPartnerProfile);
+                        }
                         return CompletableFuture.completedFuture(list);
                     }
 
@@ -186,13 +194,19 @@ public class ConversationRepository {
         String path = "/rest/v1/conversation_members?conversation_id=eq." + conversationId + "&user_id=eq." + userId;
         Map<String, Object> body = Map.of("role", newRole.name());
         return HttpClientUtil.patchAsync(path, JsonUtil.toJson(body), accessToken)
-                .thenApply(r -> null);
+                .thenApply(r -> {
+                    if (r.statusCode() >= 400) throw new RuntimeException("Could not change member role: " + r.body());
+                    return null;
+                });
     }
 
     public CompletableFuture<Void> removeMember(String conversationId, String userId, String accessToken) {
         String path = "/rest/v1/conversation_members?conversation_id=eq." + conversationId + "&user_id=eq." + userId;
         return HttpClientUtil.deleteAsync(path, accessToken)
-                .thenApply(r -> null);
+                .thenApply(r -> {
+                    if (r.statusCode() >= 400) throw new RuntimeException("Could not remove group member: " + r.body());
+                    return null;
+                });
     }
 
     public CompletableFuture<Void> togglePin(String conversationId, String userId, boolean isPinned, String accessToken) {

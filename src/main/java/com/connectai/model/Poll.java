@@ -33,6 +33,7 @@ public class Poll {
     private String createdAt;
 
     private List<PollOption> options = new ArrayList<>();
+    private List<PollVote> votes = new ArrayList<>();
     private int totalVoters;
     private int totalVotes;
     private boolean userVoted;
@@ -69,6 +70,10 @@ public class Poll {
 
     public List<PollOption> getOptions() { return options; }
     public void setOptions(List<PollOption> options) { this.options = options; }
+
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    public List<PollVote> getVotes() { return votes; }
+    public void setVotes(List<PollVote> votes) { this.votes = votes; }
 
     public int getTotalVoters() { return totalVoters; }
     public void setTotalVoters(int totalVoters) { this.totalVoters = totalVoters; }

@@ -41,11 +41,25 @@ public class ChatService {
 
     public CompletableFuture<Conversation> startDirectChat(String partnerUserId) {
         if (com.connectai.config.AppConfig.isMockMode()) {
-            return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().getConversation("conv-sarah"));
+            return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().startDirectConversation(partnerUserId));
         }
         String token = AuthService.getInstance().getAccessToken();
         String userId = AuthService.getInstance().getCurrentUser().getId();
-        return conversationRepository.createDirectConversation(userId, partnerUserId, token);
+        return conversationRepository.createDirectConversation(userId, partnerUserId, token)
+                .thenCompose(conversation -> profileRepository.getProfileById(partnerUserId, token)
+                        .thenApply(profile -> {
+                            conversation.setDirectPartnerProfile(profile);
+                            return conversation;
+                        }));
+    }
+
+    public CompletableFuture<List<com.connectai.model.Profile>> searchProfilesByUsername(String usernameQuery) {
+        if (com.connectai.config.AppConfig.isMockMode()) {
+            return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().searchProfiles(usernameQuery));
+        }
+        String token = AuthService.getInstance().getAccessToken();
+        String userId = AuthService.getInstance().getCurrentUser().getId();
+        return profileRepository.searchProfilesByUsername(usernameQuery, userId, token);
     }
 
     public CompletableFuture<Conversation> createGroup(String name, String description, boolean isPrivate) {
@@ -107,11 +121,7 @@ public class ChatService {
 
     public CompletableFuture<Message> editMessage(String messageId, String newText) {
         if (com.connectai.config.AppConfig.isMockMode()) {
-            Message m = new Message();
-            m.setId(messageId);
-            m.setContent(newText);
-            m.setEditedAt(java.time.Instant.now().toString());
-            return CompletableFuture.completedFuture(m);
+            return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().editMessage(messageId, newText));
         }
         String token = AuthService.getInstance().getAccessToken();
         return messageRepository.editMessage(messageId, newText, token);
@@ -119,6 +129,7 @@ public class ChatService {
 
     public CompletableFuture<Void> deleteMessage(String messageId) {
         if (com.connectai.config.AppConfig.isMockMode()) {
+            com.connectai.mock.MockDataProvider.getInstance().deleteMessage(messageId);
             return CompletableFuture.completedFuture(null);
         }
         String token = AuthService.getInstance().getAccessToken();
@@ -127,6 +138,7 @@ public class ChatService {
 
     public CompletableFuture<Void> toggleReaction(String messageId, String emoji, boolean add) {
         if (com.connectai.config.AppConfig.isMockMode()) {
+            com.connectai.mock.MockDataProvider.getInstance().toggleReaction(messageId, emoji);
             return CompletableFuture.completedFuture(null);
         }
         String token = AuthService.getInstance().getAccessToken();

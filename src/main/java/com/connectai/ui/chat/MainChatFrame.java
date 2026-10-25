@@ -159,7 +159,15 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                                 m, isOutgoing,
                                 replyMsg -> composerPanel.setReplyToMessage(replyMsg),
                                 editMsg -> composerPanel.setEditTargetMessage(editMsg),
-                                deleteMsg -> ChatService.getInstance().deleteMessage(deleteMsg.getId()).thenRun(() -> reloadActiveMessages())
+                                deleteMsg -> ChatService.getInstance().deleteMessage(deleteMsg.getId()).thenRun(() -> reloadActiveMessages()),
+                                emoji -> ChatService.getInstance().toggleReaction(m.getId(), emoji, !hasCurrentUserReaction(m, emoji))
+                                        .thenRun(() -> MainChatFrame.this.reloadActiveMessages())
+                                        .exceptionally(error -> {
+                                            SwingUtilities.invokeLater(() -> com.connectai.ui.components.ToastManager.showToast(
+                                                    MainChatFrame.this, com.connectai.util.ErrorMessages.from(error),
+                                                    com.connectai.ui.components.ToastManager.ToastType.ERROR));
+                                            return null;
+                                        })
                         );
                         messageListContainer.add(bubble);
                         messageListContainer.add(Box.createVerticalStrut(8));
@@ -176,6 +184,13 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
                 }
             }
         }.execute();
+    }
+
+    private boolean hasCurrentUserReaction(Message message, String emoji) {
+        String userId = AuthService.getInstance().getCurrentUser() == null
+                ? "" : AuthService.getInstance().getCurrentUser().getId();
+        return message.getReactions() != null && message.getReactions().stream()
+                .anyMatch(reaction -> emoji.equals(reaction.getEmoji()) && userId.equals(reaction.getUserId()));
     }
 
     private JPanel createDateSeparatorPill(String dateText) {
@@ -210,14 +225,38 @@ public class MainChatFrame extends JFrame implements RealtimeEventListener {
 
     @Override
     public void onNewMessage(Message message) {
-        if (activeConversation != null && message.getConversationId().equals(activeConversation.getId())) {
-            reloadActiveMessages();
-        }
-        leftSidebarPanel.refreshConversations();
+        SwingUtilities.invokeLater(() -> {
+            if (activeConversation != null && message.getConversationId() != null
+                    && message.getConversationId().equals(activeConversation.getId())) reloadActiveMessages();
+            leftSidebarPanel.refreshConversations();
+        });
     }
 
     @Override
     public void onConnectionStateChanged(boolean isConnected) {
         // Status handled
+    }
+
+    @Override
+    public void onMessageEdited(Message message) {
+        SwingUtilities.invokeLater(() -> {
+            if (activeConversation != null && message != null && message.getConversationId() != null
+                    && message.getConversationId().equals(activeConversation.getId())) reloadActiveMessages();
+        });
+    }
+
+    @Override
+    public void onReactionUpdated(com.connectai.model.MessageReaction reaction) {
+        SwingUtilities.invokeLater(() -> {
+            if (activeConversation != null) reloadActiveMessages();
+        });
+    }
+
+    @Override
+    public void onPollVoted(com.connectai.model.PollVote vote) {
+        SwingUtilities.invokeLater(() -> {
+            if (vote == null || activeConversation == null) return;
+            reloadActiveMessages();
+        });
     }
 }

@@ -7,7 +7,7 @@ For Windows/macOS installers and Render download hosting, see [DISTRIBUTION.md](
 [![Supabase](https://img.shields.io/badge/Backend-Supabase-green.svg)](https://supabase.com)
 [![OpenAI](https://img.shields.io/badge/AI-OpenAI%20API-purple.svg)](https://openai.com)
 
-**ConnectAI** is a production-grade, cross-platform Java Swing desktop chat messenger featuring real-time messaging, Supabase authentication, database synchronization, storage attachment sharing, voice note recording/playback, live polling, and AI features powered by Supabase Edge Functions and OpenAI.
+**ConnectAI 2.0.0** is a cross-platform Java Swing desktop chat messenger featuring real-time messaging, Supabase authentication, database synchronization, storage attachment sharing, voice note recording/playback, live polling, and AI features powered by Supabase Edge Functions and OpenAI.
 
 ---
 
@@ -184,6 +184,8 @@ classDiagram
 3. Run the scripts in the following order:
    - `database/schema.sql` (Creates tables, triggers, indexes)
    - `database/rls-policies.sql` (Enables Row Level Security policies)
+   - `database/secure-group-membership-roles.sql` (Restricts role changes and member removal to authorized group managers)
+   - `database/poll-results.sql` (Enables private, anonymous poll result summaries)
    - `database/storage-policies.sql` (Configures `chat-attachments` storage bucket & policies)
    - `database/sample-data.sql` (Optional seed script)
 
@@ -198,7 +200,7 @@ classDiagram
    ```bash
    supabase link --project-ref YOUR_SUPABASE_PROJECT_REF
    ```
-3. Set your OpenAI API key secret in Supabase:
+3. Set your OpenAI API key secret in Supabase (required for live summaries and rephrasing):
    ```bash
    supabase secrets set OPENAI_API_KEY=sk-proj-YOUR_ACTUAL_OPENAI_KEY
    ```
@@ -234,7 +236,7 @@ export SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 #### Or Run with Java:
 ```bash
-java -jar target/connectai-1.0.0.jar
+java -jar target/connectai-2.0.0.jar
 ```
 
 #### Compile and run tests:

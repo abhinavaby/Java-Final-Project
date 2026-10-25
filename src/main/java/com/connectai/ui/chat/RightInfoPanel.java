@@ -21,7 +21,9 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingConstants;
@@ -40,6 +42,7 @@ public class RightInfoPanel extends JPanel {
     private Runnable onCloseCallback;
     private Runnable onDeletedCallback;
     private javax.swing.JButton deleteGroupButton;
+    private java.util.List<ConversationMember> loadedMembers = java.util.List.of();
 
     public RightInfoPanel(Runnable onCloseCallback, Runnable onDeletedCallback) {
         this.onDeletedCallback = onDeletedCallback;
@@ -225,6 +228,10 @@ public class RightInfoPanel extends JPanel {
     }
 
     private void addMemberRow(String name, boolean online, String role) {
+        addMemberRow(name, online, role, null);
+    }
+
+    private void addMemberRow(String name, boolean online, String role, ConversationMember member) {
         JPanel row = new JPanel(new BorderLayout(8, 0));
         row.setOpaque(false);
         row.setPreferredSize(new Dimension(260, 32));
@@ -257,8 +264,65 @@ public class RightInfoPanel extends JPanel {
         row.add(left, BorderLayout.WEST);
         row.add(roleBadge, BorderLayout.EAST);
 
+        if (member != null && hasMemberActions(member)) {
+            row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            row.addMouseListener(new java.awt.event.MouseAdapter() {
+                private void showActions(java.awt.event.MouseEvent event) {
+                    if (!event.isPopupTrigger()) return;
+                    JPopupMenu menu = createMemberActions(member);
+                    if (menu.getComponentCount() > 0) menu.show(row, event.getX(), event.getY());
+                }
+                @Override public void mousePressed(java.awt.event.MouseEvent e) { showActions(e); }
+                @Override public void mouseReleased(java.awt.event.MouseEvent e) { showActions(e); }
+            });
+        }
+
         membersListContainer.add(row);
         membersListContainer.add(Box.createVerticalStrut(2));
+    }
+
+    private boolean hasMemberActions(ConversationMember target) {
+        if (conversation == null || conversation.getType() != com.connectai.model.ConversationType.GROUP) return false;
+        Role actorRole = currentUserRole();
+        if (target.getRole() == Role.OWNER) return false;
+        return actorRole == Role.OWNER || (actorRole == Role.ADMIN && target.getRole() == Role.MEMBER);
+    }
+
+    private Role currentUserRole() {
+        var user = com.connectai.service.AuthService.getInstance().getCurrentUser();
+        if (user == null) return Role.MEMBER;
+        return loadedMembers.stream().filter(member -> user.getId().equals(member.getUserId()))
+                .map(ConversationMember::getRole).findFirst().orElse(Role.MEMBER);
+    }
+
+    private JPopupMenu createMemberActions(ConversationMember target) {
+        JPopupMenu menu = new JPopupMenu();
+        if (currentUserRole() == Role.OWNER) {
+            Role nextRole = target.getRole() == Role.ADMIN ? Role.MEMBER : Role.ADMIN;
+            JMenuItem roleItem = new JMenuItem(nextRole == Role.ADMIN ? "Make admin" : "Make member");
+            roleItem.addActionListener(e -> runMemberAction(() ->
+                    com.connectai.service.ChatService.getInstance().updateMemberRole(conversation.getId(), target.getUserId(), nextRole)));
+            menu.add(roleItem);
+        }
+        JMenuItem remove = new JMenuItem("Remove from group");
+        remove.addActionListener(e -> {
+            if (javax.swing.JOptionPane.showConfirmDialog(this, "Remove this person from the group?", "Remove member",
+                    javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE) == javax.swing.JOptionPane.OK_OPTION)
+                runMemberAction(() -> com.connectai.service.ChatService.getInstance().removeMember(conversation.getId(), target.getUserId()));
+        });
+        menu.add(remove);
+        return menu;
+    }
+
+    private void runMemberAction(java.util.function.Supplier<java.util.concurrent.CompletableFuture<Void>> action) {
+        action.get().whenComplete((ignored, error) -> SwingUtilities.invokeLater(() -> {
+            if (error != null) {
+                ToastManager.showToast(this, com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR);
+            } else {
+                ToastManager.showToast(this, "Group membership updated", ToastManager.ToastType.SUCCESS);
+                setConversation(conversation);
+            }
+        }));
     }
 
     public void setConversation(Conversation conv) {
@@ -286,17 +350,19 @@ public class RightInfoPanel extends JPanel {
                 .thenAccept(members -> {
                     SwingUtilities.invokeLater(() -> {
                         if (members != null && !members.isEmpty()) {
+                            loadedMembers = java.util.List.copyOf(members);
                             membersListContainer.removeAll();
                             memberCountBadge.setText(members.size() + (members.size() == 1 ? " member" : " members"));
                             for (ConversationMember cm : members) {
                                 String mName = cm.getProfile() != null ? cm.getProfile().getEffectiveName() : "User";
                                 String role = cm.getRole() == Role.OWNER ? "Owner" : (cm.getRole() == Role.ADMIN ? "Admin" : "Member");
                                 boolean online = cm.getProfile() != null && cm.getProfile().isOnline();
-                                addMemberRow(mName, online, role);
+                                addMemberRow(mName, online, role, cm);
                             }
                             membersListContainer.revalidate();
                             membersListContainer.repaint();
                         } else {
+                            loadedMembers = java.util.List.of();
                             loadDefaultMembers();
                         }
                     });

@@ -37,14 +37,22 @@ public class MessageBubble extends JPanel {
     private Consumer<Message> onReplyCallback;
     private Consumer<Message> onEditCallback;
     private Consumer<Message> onDeleteCallback;
+    private Consumer<String> onReactionCallback;
 
     public MessageBubble(Message message, boolean isOutgoing, Consumer<Message> onReplyCallback,
                          Consumer<Message> onEditCallback, Consumer<Message> onDeleteCallback) {
+        this(message, isOutgoing, onReplyCallback, onEditCallback, onDeleteCallback, null);
+    }
+
+    public MessageBubble(Message message, boolean isOutgoing, Consumer<Message> onReplyCallback,
+                         Consumer<Message> onEditCallback, Consumer<Message> onDeleteCallback,
+                         Consumer<String> onReactionCallback) {
         this.message = message;
         this.isOutgoing = isOutgoing;
         this.onReplyCallback = onReplyCallback;
         this.onEditCallback = onEditCallback;
         this.onDeleteCallback = onDeleteCallback;
+        this.onReactionCallback = onReactionCallback;
 
         setLayout(new BorderLayout());
         setOpaque(false);
@@ -264,10 +272,10 @@ public class MessageBubble extends JPanel {
         });
 
         JMenuItem reactHeart = new JMenuItem("❤️ React Heart");
-        reactHeart.addActionListener(e -> ToastManager.showToast(this, "Reacted ❤️", ToastManager.ToastType.SUCCESS));
+        reactHeart.addActionListener(e -> react("❤️"));
 
         JMenuItem reactThumbs = new JMenuItem("👍 React Thumbs Up");
-        reactThumbs.addActionListener(e -> ToastManager.showToast(this, "Reacted 👍", ToastManager.ToastType.SUCCESS));
+        reactThumbs.addActionListener(e -> react("👍"));
 
         menu.add(copy);
         menu.add(reply);
@@ -299,6 +307,10 @@ public class MessageBubble extends JPanel {
                 if (e.isPopupTrigger()) menu.show(target, e.getX(), e.getY());
             }
         });
+    }
+
+    private void react(String emoji) {
+        if (onReactionCallback != null) onReactionCallback.accept(emoji);
     }
 
     private String formatTime(String timeIso) {

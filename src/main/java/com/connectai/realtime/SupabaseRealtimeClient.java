@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -25,6 +26,7 @@ public class SupabaseRealtimeClient {
     private boolean isConnected = false;
     private int refCounter = 1;
     private int reconnectAttempts = 0;
+    private ScheduledFuture<?> heartbeatTask;
 
     private SupabaseRealtimeClient() {}
 
@@ -39,6 +41,10 @@ public class SupabaseRealtimeClient {
             return;
         }
         if (isConnected || (webSocketClient != null && webSocketClient.isOpen())) return;
+        if (!AppConfig.isSupabaseConfigured() || AuthService.getInstance().getAccessToken() == null) {
+            notifyConnectionState(false);
+            return;
+        }
 
         String wsUrl = buildWebSocketUrl();
         if (wsUrl == null) return;
@@ -113,11 +119,12 @@ public class SupabaseRealtimeClient {
     }
 
     private void startHeartbeat() {
-        executor.scheduleAtFixedRate(() -> {
+        if (heartbeatTask != null && !heartbeatTask.isDone()) return;
+        heartbeatTask = executor.scheduleAtFixedRate(() -> {
             if (isConnected && webSocketClient != null && webSocketClient.isOpen()) {
                 Map<String, Object> heartbeat = new HashMap<>();
                 heartbeat.put("topic", "phoenix");
-                heartbeat.put("event", "phx_ping");
+                heartbeat.put("event", "heartbeat");
                 heartbeat.put("payload", Map.of());
                 heartbeat.put("ref", String.valueOf(refCounter++));
                 webSocketClient.send(JsonUtil.toJson(heartbeat));
@@ -131,14 +138,19 @@ public class SupabaseRealtimeClient {
         Map<String, Object> joinPayload = new HashMap<>();
         joinPayload.put("topic", "realtime:public:messages");
         joinPayload.put("event", "phx_join");
+        joinPayload.put("join_ref", String.valueOf(refCounter));
         joinPayload.put("payload", Map.of(
                 "config", Map.of(
+                        "broadcast", Map.of("ack", false, "self", false),
+                        "presence", Map.of("enabled", false, "key", ""),
                         "postgres_changes", List.of(
                                 Map.of("event", "*", "schema", "public", "table", "messages"),
                                 Map.of("event", "*", "schema", "public", "table", "message_reactions"),
                                 Map.of("event", "*", "schema", "public", "table", "poll_votes")
-                        )
-                )
+                        ),
+                        "private", false
+                ),
+                "access_token", AuthService.getInstance().getAccessToken()
         ));
         joinPayload.put("ref", String.valueOf(refCounter++));
 
@@ -165,6 +177,21 @@ public class SupabaseRealtimeClient {
                         Message msg = JsonUtil.getMapper().treeToValue(record, Message.class);
                         notifyMessageEdited(msg);
                     }
+                } else if ("poll_votes".equals(table) && "INSERT".equals(type)) {
+                    com.connectai.model.PollVote vote = JsonUtil.getMapper().treeToValue(record, com.connectai.model.PollVote.class);
+                    notifyPollVoted(vote);
+                } else if ("message_reactions".equals(table)) {
+                    JsonNode reactionRecord = "DELETE".equals(type) ? data.path("old_record") : record;
+                    if (!reactionRecord.isMissingNode() && !reactionRecord.isNull()) {
+                        com.connectai.model.MessageReaction reaction = JsonUtil.getMapper()
+                                .treeToValue(reactionRecord, com.connectai.model.MessageReaction.class);
+                        notifyReactionUpdated(reaction);
+                    }
+                }
+            } else if ("phx_reply".equals(event)) {
+                JsonNode reply = payload.path("response");
+                if ("error".equals(payload.path("status").asText()) || reply.has("postgres_changes") && reply.path("postgres_changes").isEmpty()) {
+                    System.err.println("Supabase realtime subscription was rejected: " + reply);
                 }
             } else if ("typing".equals(event)) {
                 String convId = root.path("topic").asText("").replace("realtime:room:", "");
@@ -176,9 +203,8 @@ public class SupabaseRealtimeClient {
     }
 
     private void scheduleReconnect() {
-        if (reconnectAttempts > 5) return;
         reconnectAttempts++;
-        long delaySeconds = (long) Math.pow(2, reconnectAttempts);
+        long delaySeconds = Math.min(60, (long) Math.pow(2, Math.min(reconnectAttempts, 6)));
         executor.schedule(this::connect, delaySeconds, TimeUnit.SECONDS);
     }
 
@@ -210,6 +236,18 @@ public class SupabaseRealtimeClient {
     private void notifyTyping(String convId, String userId, boolean isTyping) {
         synchronized (listeners) {
             for (RealtimeEventListener l : listeners) l.onTypingStatusChanged(convId, userId, isTyping);
+        }
+    }
+
+    private void notifyPollVoted(com.connectai.model.PollVote vote) {
+        synchronized (listeners) {
+            for (RealtimeEventListener listener : listeners) listener.onPollVoted(vote);
+        }
+    }
+
+    private void notifyReactionUpdated(com.connectai.model.MessageReaction reaction) {
+        synchronized (listeners) {
+            for (RealtimeEventListener listener : listeners) listener.onReactionUpdated(reaction);
         }
     }
 }

@@ -4,7 +4,7 @@ import argparse, os, pathlib, platform, shutil, subprocess, re
 parser = argparse.ArgumentParser()
 parser.add_argument('--type', choices=['dmg', 'exe', 'app-image'], required=True)
 release_version = os.environ.get('GITHUB_REF_NAME', '').removeprefix('v')
-parser.add_argument('--version', default=release_version if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', release_version) else '1.0.0')
+parser.add_argument('--version', default=release_version if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', release_version) else '2.0.0')
 parser.add_argument('--label', default='mac-arm64')
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
@@ -12,7 +12,7 @@ os.chdir(root)
 stage = root / 'target' / 'package-input'
 shutil.rmtree(stage, ignore_errors=True)
 stage.mkdir(parents=True)
-shutil.copy2(root / 'target/connectai-1.0.0.jar', stage / 'connectai.jar')
+shutil.copy2(root / 'target/connectai-2.0.0.jar', stage / 'connectai.jar')
 url = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
 key = os.environ.get('SUPABASE_PUBLISHABLE_KEY', os.environ.get('SUPABASE_ANON_KEY', '')).strip()
 if bool(url) != bool(key): raise SystemExit('Provide both the Supabase URL and public key.')

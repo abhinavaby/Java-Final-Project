@@ -43,6 +43,17 @@ public class HttpClientUtil {
         return client.sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    public static CompletableFuture<HttpResponse<byte[]>> getBytesAsync(String pathOrUrl, String bearerToken) {
+        String fullUrl = buildFullUrl(pathOrUrl);
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(fullUrl))
+                .timeout(Duration.ofSeconds(60))
+                .header("apikey", AppConfig.getSupabaseAnonKey())
+                .header("Accept", "application/octet-stream");
+        if (bearerToken != null && !bearerToken.isBlank()) builder.header("Authorization", "Bearer " + bearerToken);
+        return client.sendAsync(builder.GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+    }
+
     public static CompletableFuture<HttpResponse<String>> postAsync(String pathOrUrl, String jsonBody, String bearerToken) {
         String fullUrl = buildFullUrl(pathOrUrl);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -51,7 +62,7 @@ public class HttpClientUtil {
                 .header("apikey", AppConfig.getSupabaseAnonKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .header("Prefer", (pathOrUrl.startsWith("/rest/v1/conversations?") || pathOrUrl.startsWith("/rest/v1/messages?") || pathOrUrl.startsWith("/rest/v1/attachments?"))
+                .header("Prefer", (pathOrUrl.startsWith("/rest/v1/conversations?") || pathOrUrl.startsWith("/rest/v1/messages?") || pathOrUrl.startsWith("/rest/v1/attachments?") || pathOrUrl.contains("?select="))
                         ? "return=representation" : "return=minimal");
 
         if (bearerToken != null && !bearerToken.isBlank()) {

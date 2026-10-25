@@ -115,7 +115,16 @@ public class ConversationListPanel extends JPanel {
         newChatBtn.setPreferredSize(new Dimension(30, 30));
         newChatBtn.addActionListener(e -> {
             Frame frame = (Frame) SwingUtilities.getWindowAncestor(this);
-            new CreateGroupDialog(frame, this::refreshConversations).setVisible(true);
+            JPopupMenu menu = new JPopupMenu();
+            JMenuItem directChat = new JMenuItem("New direct chat");
+            directChat.addActionListener(event -> new NewDirectChatDialog(frame, this::openConversation)
+                    .setVisible(true));
+            JMenuItem groupChat = new JMenuItem("Create group");
+            groupChat.addActionListener(event -> new CreateGroupDialog(frame, this::refreshConversations)
+                    .setVisible(true));
+            menu.add(directChat);
+            menu.add(groupChat);
+            menu.show(newChatBtn, 0, newChatBtn.getHeight());
         });
 
         headerRow.add(logoBox, BorderLayout.WEST);
@@ -401,5 +410,14 @@ public class ConversationListPanel extends JPanel {
             });
             return null;
         });
+    }
+
+    private void openConversation(Conversation conversation) {
+        if (conversation == null) return;
+        selectedConvId = conversation.getId();
+        if (allConversations.stream().noneMatch(existing -> existing.getId().equals(conversation.getId())))
+            allConversations.add(0, conversation);
+        applyFilter();
+        if (onConversationSelected != null) onConversationSelected.accept(conversation);
     }
 }

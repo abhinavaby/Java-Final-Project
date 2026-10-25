@@ -68,21 +68,33 @@ public class AudioPlayerComponent extends JPanel {
             playBtn.setText("⏸");
 
             AttachmentService.getInstance().getSignedDownloadUrl(attachment.getStoragePath())
-                    .thenCompose(url -> HttpClientUtil.getAsync(url, null))
+                    .thenCompose(url -> HttpClientUtil.getBytesAsync(url, null))
                     .thenAccept(response -> {
                         if (response.statusCode() < 400) {
-                            byte[] bytes = response.body().getBytes();
+                            byte[] bytes = response.body();
                             AudioService.getInstance().playAudio(bytes, () -> {
-                                isPlaying = false;
-                                playBtn.setText("▶");
+                                javax.swing.SwingUtilities.invokeLater(() -> {
+                                    isPlaying = false;
+                                    playBtn.setText("▶");
+                                });
                             });
                         } else {
-                            isPlaying = false;
-                            playBtn.setText("▶");
+                            javax.swing.SwingUtilities.invokeLater(() -> {
+                                isPlaying = false;
+                                playBtn.setText("▶");
+                                com.connectai.ui.components.ToastManager.showToast(this,
+                                        "Audio download failed (HTTP " + response.statusCode() + ").",
+                                        com.connectai.ui.components.ToastManager.ToastType.ERROR);
+                            });
                         }
                     }).exceptionally(ex -> {
-                        isPlaying = false;
-                        playBtn.setText("▶");
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            isPlaying = false;
+                            playBtn.setText("▶");
+                            com.connectai.ui.components.ToastManager.showToast(this,
+                                    com.connectai.util.ErrorMessages.from(ex),
+                                    com.connectai.ui.components.ToastManager.ToastType.ERROR);
+                        });
                         return null;
                     });
         }

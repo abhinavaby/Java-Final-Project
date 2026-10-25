@@ -38,6 +38,8 @@ public class AIRephrasePopup extends JPopupMenu {
         title.setForeground(ThemeColors.PRIMARY_ACCENT);
         panel.add(title, BorderLayout.NORTH);
 
+        JPanel optionsPanel = new JPanel(new BorderLayout(0, 6));
+        optionsPanel.setOpaque(false);
         JPanel chipsPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 6));
         chipsPanel.setOpaque(false);
 
@@ -48,7 +50,14 @@ public class AIRephrasePopup extends JPopupMenu {
             chipsPanel.add(btn);
         }
 
-        panel.add(chipsPanel, BorderLayout.CENTER);
+        optionsPanel.add(chipsPanel, BorderLayout.CENTER);
+        if (!com.connectai.config.AppConfig.isMockMode()) {
+            JLabel privacyNotice = new JLabel("Your draft is sent to the configured AI service through Supabase.");
+            privacyNotice.setFont(ThemeFonts.CAPTION);
+            privacyNotice.setForeground(ThemeColors.MUTED_TEXT);
+            optionsPanel.add(privacyNotice, BorderLayout.SOUTH);
+        }
+        panel.add(optionsPanel, BorderLayout.CENTER);
         add(panel);
     }
 

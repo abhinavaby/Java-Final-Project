@@ -132,6 +132,22 @@ CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON public.poll_options(poll_id)
 CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON public.poll_votes(poll_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_message ON public.attachments(message_id);
 
+-- Publish chat events to Supabase Realtime for clients without the Supabase JS SDK.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+        IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'messages') THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'message_reactions') THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.message_reactions;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'poll_votes') THEN
+            ALTER PUBLICATION supabase_realtime ADD TABLE public.poll_votes;
+        END IF;
+    END IF;
+END $$;
+
 -- Automatic Profile Creation & Default Channel Enrollment on Auth Sign Up
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$

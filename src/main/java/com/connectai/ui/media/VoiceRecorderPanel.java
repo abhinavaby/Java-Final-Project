@@ -75,6 +75,9 @@ public class VoiceRecorderPanel extends JPanel {
             });
             timer.start();
         } catch (Exception ex) {
+            com.connectai.ui.components.ToastManager.showToast(this,
+                    "Could not start recording: " + com.connectai.util.ErrorMessages.from(ex),
+                    com.connectai.ui.components.ToastManager.ToastType.ERROR);
             cancel();
         }
     }
@@ -82,7 +85,8 @@ public class VoiceRecorderPanel extends JPanel {
     private void stopAndSend() {
         if (timer != null) timer.stop();
         recordedWavBytes = AudioService.getInstance().stopVoiceRecording();
-        if (onSendCallback != null && recordedWavBytes.length > 0) {
+        durationSeconds = (int) AudioService.getInstance().getRecordedDurationSeconds();
+        if (onSendCallback != null) {
             onSendCallback.accept(recordedWavBytes, durationSeconds);
         }
     }

@@ -188,7 +188,21 @@ public class AuthService {
         try {
             String json = JsonUtil.toJson(user);
             Files.createDirectories(SESSION_FILE.toPath().getParent());
+            if (!SESSION_FILE.exists()) {
+                try {
+                    Files.createFile(SESSION_FILE.toPath(), java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                            java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+                } catch (UnsupportedOperationException ignored) {
+                    // Non-POSIX platforms use the operating system's per-user application data directory ACL.
+                }
+            }
             Files.writeString(SESSION_FILE.toPath(), json);
+            try {
+                Files.setPosixFilePermissions(SESSION_FILE.toPath(),
+                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            } catch (UnsupportedOperationException ignored) {
+                // Windows file permissions are inherited from the user-specific application data directory.
+            }
         } catch (Exception e) {
             System.err.println("Failed to save session locally: " + e.getMessage());
         }

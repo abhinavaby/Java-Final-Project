@@ -157,8 +157,6 @@ public class ComposerPanel extends JPanel {
         micBtn.addActionListener(e -> startVoiceRecorder());
 
         rightTools.add(aiBtn);
-        rightTools.add(micBtn);
-
         // Solid vibrant blue circular send button with white paper airplane
         JButton circularSendBtn = new JButton() {
             @Override
@@ -184,7 +182,6 @@ public class ComposerPanel extends JPanel {
         circularSendBtn.setToolTipText("Send Message");
         circularSendBtn.addActionListener(e -> sendCurrentText());
 
-        rightTools.add(micBtn);
         rightTools.add(circularSendBtn);
 
         JPanel centerPanel = new JPanel(new BorderLayout());
@@ -270,23 +267,17 @@ public class ComposerPanel extends JPanel {
                 () -> renderNormalComposer(),
                 (audioBytes, durationSeconds) -> {
                     if (audioBytes != null && audioBytes.length > 0 && conversationId != null) {
-                        try {
-                            File tempAudio = File.createTempFile("voice_", ".wav");
-                            java.nio.file.Files.write(tempAudio.toPath(), audioBytes);
-                            AttachmentService.getInstance().uploadAndSendFile(
-                                    conversationId, tempAudio, "Voice Note (" + durationSeconds + "s)",
-                                    com.connectai.model.MessageType.VOICE, durationSeconds
-                            ).thenRun(() -> {
-                                SwingUtilities.invokeLater(() -> {
+                        AudioService.getInstance().sendVoiceNote(conversationId, audioBytes, durationSeconds)
+                                .whenComplete((message, error) -> SwingUtilities.invokeLater(() -> {
                                     renderNormalComposer();
-                                    if (onMessageSentCallback != null) onMessageSentCallback.run();
-                                });
-                            });
-                        } catch (Exception e) {
-                            renderNormalComposer();
-                        }
+                                    if (error != null) ToastManager.showToast(this,
+                                            com.connectai.util.ErrorMessages.from(error), ToastManager.ToastType.ERROR);
+                                    else if (onMessageSentCallback != null) onMessageSentCallback.run();
+                                }));
                     } else {
                         renderNormalComposer();
+                        ToastManager.showToast(this, "The recording is empty or no conversation is selected.",
+                                ToastManager.ToastType.WARNING);
                     }
                 }
         );

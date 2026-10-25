@@ -146,6 +146,12 @@ public class ChatHeaderPanel extends JPanel {
             return;
         }
 
+        if (!com.connectai.config.AppConfig.isMockMode()
+                && javax.swing.JOptionPane.showConfirmDialog(this,
+                        "Recent messages from this conversation will be sent to the configured AI service through Supabase to create a summary. Continue?",
+                        "Send conversation to AI", javax.swing.JOptionPane.OK_CANCEL_OPTION,
+                        javax.swing.JOptionPane.INFORMATION_MESSAGE) != javax.swing.JOptionPane.OK_OPTION) return;
+
         Frame top = (Frame) SwingUtilities.getWindowAncestor(this);
         ToastManager.showToast(this, "Generating AI summary...", ToastManager.ToastType.INFO);
 
@@ -161,7 +167,7 @@ public class ChatHeaderPanel extends JPanel {
                     com.connectai.model.AISummaryResponse res = get();
                     new AISummaryDialog(top, res).setVisible(true);
                 } catch (Exception ex) {
-                    ToastManager.showToast(ChatHeaderPanel.this, "Summary failed: " + ex.getMessage(),
+                    ToastManager.showToast(ChatHeaderPanel.this, "Summary failed: " + com.connectai.util.ErrorMessages.from(ex),
                             ToastManager.ToastType.ERROR);
                 }
             }

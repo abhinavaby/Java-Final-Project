@@ -30,6 +30,7 @@ public class PollCardComponent extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
         renderPoll();
+        refreshPollDetails();
     }
 
     private void renderPoll() {
@@ -72,7 +73,7 @@ public class PollCardComponent extends JPanel {
         }
 
         // Footer
-        JLabel footerLabel = new JLabel(poll.getTotalVoters() + " votes total");
+        JLabel footerLabel = new JLabel(poll.getTotalVoters() + " voters · " + poll.getTotalVotes() + " votes");
         footerLabel.setFont(ThemeFonts.BODY_SMALL);
         footerLabel.setForeground(ThemeColors.MUTED_TEXT);
 
@@ -124,26 +125,44 @@ public class PollCardComponent extends JPanel {
         bar.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                castVote(option.getId());
+                castVote(option.getId(), selected);
             }
         });
 
         return bar;
     }
 
-    private void castVote(String optionId) {
+    private void castVote(String optionId, boolean alreadySelected) {
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                PollService.getInstance().vote(poll.getId(), optionId, poll.isAllowsMultipleAnswers()).get();
+                PollService.getInstance().toggleVote(poll.getId(), optionId, poll.isAllowsMultipleAnswers(), alreadySelected).get();
                 poll = PollService.getInstance().refreshPoll(poll.getId()).get();
                 return null;
             }
 
             @Override
             protected void done() {
-                renderPoll();
+                try {
+                    get();
+                    renderPoll();
+                } catch (Exception error) {
+                    com.connectai.ui.components.ToastManager.showToast(PollCardComponent.this,
+                            com.connectai.util.ErrorMessages.from(error),
+                            com.connectai.ui.components.ToastManager.ToastType.ERROR);
+                }
             }
         }.execute();
+    }
+
+    private void refreshPollDetails() {
+        if (poll == null || poll.getId() == null || poll.getId().isBlank()) return;
+        PollService.getInstance().refreshPoll(poll.getId()).whenComplete((updated, error) ->
+                javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (error == null && updated != null) {
+                        poll = updated;
+                        renderPoll();
+                    }
+                }));
     }
 }

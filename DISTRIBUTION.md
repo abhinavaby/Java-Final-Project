@@ -10,7 +10,7 @@ The existing Docker/noVNC setup is a shared demo session, not a multi-user deskt
    To override them for a release, in GitHub repository Settings → Secrets and variables → Actions → Variables,
    add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Use the public publishable key
    (or legacy anon key), never a service-role/secret key. Do not bundle an OpenAI key.
-3. Push a release tag, for example `v1.0.0`. The workflow builds Windows x64,
+3. Push a release tag, for example `v2.0.0`. The workflow builds Windows x64,
    Apple silicon macOS and Intel macOS installers on their respective operating systems.
    Java is included. The workflow uploads installers to the GitHub release.
    Manual workflow runs produce downloadable Actions artifacts without publishing a release.

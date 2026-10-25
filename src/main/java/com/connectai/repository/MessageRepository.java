@@ -105,10 +105,16 @@ public class MessageRepository {
                     "emoji", emoji
             );
             return HttpClientUtil.postAsync("/rest/v1/message_reactions", JsonUtil.toJson(body), accessToken)
-                    .thenApply(r -> null);
+                    .thenApply(r -> {
+                        if (r.statusCode() >= 400) throw new RuntimeException("Failed to add reaction: " + r.body());
+                        return null;
+                    });
         } else {
             String path = "/rest/v1/message_reactions?message_id=eq." + messageId + "&user_id=eq." + userId + "&emoji=eq." + emoji;
-            return HttpClientUtil.deleteAsync(path, accessToken).thenApply(r -> null);
+            return HttpClientUtil.deleteAsync(path, accessToken).thenApply(r -> {
+                if (r.statusCode() >= 400) throw new RuntimeException("Failed to remove reaction: " + r.body());
+                return null;
+            });
         }
     }
 
@@ -119,6 +125,9 @@ public class MessageRepository {
                 "read_at", java.time.Instant.now().toString()
         );
         return HttpClientUtil.postAsync("/rest/v1/message_receipts?on_conflict=message_id,user_id", JsonUtil.toJson(body), accessToken)
-                .thenApply(r -> null);
+                .thenApply(r -> {
+                    if (r.statusCode() >= 400) throw new RuntimeException("Failed to mark message as read: " + r.body());
+                    return null;
+                });
     }
 }

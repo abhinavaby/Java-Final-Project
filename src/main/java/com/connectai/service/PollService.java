@@ -72,9 +72,21 @@ public class PollService {
         return pollRepository.castVote(pollId, optionId, userId, allowsMultiple, token);
     }
 
+    public CompletableFuture<Void> toggleVote(String pollId, String optionId, boolean allowsMultiple, boolean alreadySelected) {
+        if (!alreadySelected) return vote(pollId, optionId, allowsMultiple);
+        if (!allowsMultiple) return CompletableFuture.completedFuture(null);
+        if (com.connectai.config.AppConfig.isMockMode()) {
+            com.connectai.mock.MockDataProvider.getInstance().votePoll(pollId, optionId, true);
+            return CompletableFuture.completedFuture(null);
+        }
+        String token = AuthService.getInstance().getAccessToken();
+        String userId = AuthService.getInstance().getCurrentUser().getId();
+        return pollRepository.retractVote(pollId, optionId, userId, token);
+    }
+
     public CompletableFuture<Poll> refreshPoll(String pollId) {
         if (com.connectai.config.AppConfig.isMockMode()) {
-            return CompletableFuture.completedFuture(null);
+            return CompletableFuture.completedFuture(com.connectai.mock.MockDataProvider.getInstance().getPoll(pollId));
         }
         String token = AuthService.getInstance().getAccessToken();
         String userId = AuthService.getInstance().getCurrentUser().getId();
