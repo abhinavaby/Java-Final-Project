@@ -24,5 +24,5 @@ fi
 
 echo "Error: Maven not found on PATH or in ~/.m2/wrapper/dists."
 echo "Please install Maven via 'brew install maven' or run with Java directly:"
-echo "  java -jar target/connectai-2.2.0.jar"
+echo "  java -jar target/connectai-2.2.1.jar"
 exit 1

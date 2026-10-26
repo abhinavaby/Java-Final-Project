@@ -8,4 +8,4 @@ cd "$DIR"
 ./mvnw package -DskipTests
 
 echo "Launching ConnectAI Desktop Application..."
-java -jar target/connectai-2.2.0.jar "$@"
+java -jar target/connectai-2.2.1.jar "$@"

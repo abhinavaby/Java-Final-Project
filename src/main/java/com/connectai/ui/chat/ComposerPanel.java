@@ -24,8 +24,6 @@ import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
 import java.io.File;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -47,7 +45,6 @@ public class ComposerPanel extends JPanel {
     private JPanel previewHeaderPanel;
     private JPanel activeComposerCard;
     private Runnable onMessageSentCallback;
-    private static final String PLACEHOLDER = "Type a message...";
 
     public ComposerPanel(Runnable onMessageSentCallback) {
         this.onMessageSentCallback = onMessageSentCallback;
@@ -88,31 +85,12 @@ public class ComposerPanel extends JPanel {
 
         inputArea = new JTextArea(1, 40);
         inputArea.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        inputArea.setText(PLACEHOLDER);
-        inputArea.setForeground(ThemeColors.MUTED_TEXT);
+        inputArea.setForeground(ThemeColors.PRIMARY_TEXT);
         inputArea.setCaretColor(ThemeColors.PRIMARY_ACCENT);
         inputArea.setLineWrap(true);
         inputArea.setWrapStyleWord(true);
         inputArea.setOpaque(false);
         inputArea.setBorder(BorderFactory.createEmptyBorder(8, 6, 8, 6));
-
-        inputArea.addFocusListener(new FocusAdapter() {
-            @Override
-            public void focusGained(FocusEvent e) {
-                if (PLACEHOLDER.equals(inputArea.getText())) {
-                    inputArea.setText("");
-                    inputArea.setForeground(ThemeColors.PRIMARY_TEXT);
-                }
-            }
-
-            @Override
-            public void focusLost(FocusEvent e) {
-                if (inputArea.getText().trim().isEmpty()) {
-                    inputArea.setText(PLACEHOLDER);
-                    inputArea.setForeground(ThemeColors.MUTED_TEXT);
-                }
-            }
-        });
 
         inputArea.addKeyListener(new java.awt.event.KeyAdapter() {
             @Override
@@ -234,15 +212,15 @@ public class ComposerPanel extends JPanel {
         replyToMessage = null;
         editTargetMessage = null;
         previewHeaderPanel.setVisible(false);
-        inputArea.setText(PLACEHOLDER);
-        inputArea.setForeground(ThemeColors.MUTED_TEXT);
+        inputArea.setText("");
+        inputArea.setForeground(ThemeColors.PRIMARY_TEXT);
         revalidate();
         repaint();
     }
 
     private void sendCurrentText() {
         String content = inputArea.getText().trim();
-        if (content.isEmpty() || PLACEHOLDER.equals(content) || conversationId == null) {
+        if (content.isEmpty() || conversationId == null) {
             return;
         }
 
@@ -324,7 +302,7 @@ public class ComposerPanel extends JPanel {
 
     private void openAIRephrasePopup(IconButton anchor) {
         String text = inputArea.getText().trim();
-        if (text.isEmpty() || PLACEHOLDER.equals(text)) {
+        if (text.isEmpty()) {
             ToastManager.showToast(this, "Type a message first to rephrase it with AI", ToastManager.ToastType.WARNING);
             return;
         }

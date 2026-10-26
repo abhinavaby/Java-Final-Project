@@ -174,7 +174,7 @@ public class AppConfig {
 
     public static String getAppVersion() {
         load();
-        return properties.getProperty("app.version", "2.2.0");
+        return properties.getProperty("app.version", "2.2.1");
     }
 
     public static boolean isDarkMode() {

@@ -4,7 +4,7 @@
   <groupId>com.connectai</groupId>
   <artifactId>connectai</artifactId>
   <name>ConnectAI</name>
-  <version>2.1.0</version>
+  <version>2.2.1</version>
   <description>AI-Powered Realtime Java Desktop Chat Application</description>
   <build>
     <plugins>
